@@ -223,7 +223,7 @@ if (CATKIN_ENABLE_TESTING)
   # Add gtest based cpp test target and link libraries
   catkin_add_gtest(ROSJsonConverterTest test/test_ros_json_converter.cpp)
   if(TARGET ROSJsonConverterTest)
-    target_link_libraries(ROSJsonConverterTest ${PROJECT_NAME})
+    target_link_libraries(ROSJsonConverterTest ${PROJECT_NAME} ${catkin_LIBRARIES})
   endif()
 
   ## Add folders to be run by python nosetests

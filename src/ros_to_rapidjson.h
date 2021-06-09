@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include <ros_babel_fish/babel_fish.h>
 
 #include "rapidjson/document.h"
@@ -11,5 +13,7 @@ void translatedMsgtoJson(const ros_babel_fish::Message& message, rapidjson::Valu
                          rapidjson::Document::AllocatorType& alloc);
 void toJson(ros_babel_fish::BabelFish& fish, const ros_babel_fish::BabelFishMessage& msg,
             rapidjson::Value& doc, rapidjson::Document::AllocatorType& alloc);
+
+std::string jsonToString(const rapidjson::Document& doc);
 
 } // namespace ros_rapidjson_converter

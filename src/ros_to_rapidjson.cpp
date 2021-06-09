@@ -1,5 +1,7 @@
 #include "ros_to_rapidjson.h"
 
+#include "rapidjson/writer.h"
+
 namespace ros_rapidjson_converter
 {
 
@@ -77,7 +79,7 @@ void translatedMsgtoJson(const ros_babel_fish::Message& message, rapidjson::Valu
                 out.PushBack(base.as<ros_babel_fish::ArrayMessage<double>>()[i], alloc);
                 break;
             case ros_babel_fish::MessageTypes::Time: {
-                const ros::Time rosTime =
+                const ros::Time& rosTime =
                     base.as<ros_babel_fish::ArrayMessage<ros::Time>>()[i];
                 rapidjson::Value obj;
                 obj.SetObject();
@@ -87,7 +89,7 @@ void translatedMsgtoJson(const ros_babel_fish::Message& message, rapidjson::Valu
                 break;
             }
             case ros_babel_fish::MessageTypes::Duration: {
-                const ros::Duration rosTime =
+                const ros::Duration& rosTime =
                     base.as<ros_babel_fish::ArrayMessage<ros::Duration>>()[i];
                 rapidjson::Value obj;
                 obj.SetObject();
@@ -98,29 +100,37 @@ void translatedMsgtoJson(const ros_babel_fish::Message& message, rapidjson::Valu
             }
             case ros_babel_fish::MessageTypes::String: {
                 rapidjson::Value jsonStr;
-                const std::string str =
+                const std::string& str =
                     base.as<ros_babel_fish::ArrayMessage<std::string>>()[i];
                 jsonStr.SetString(str, alloc);
                 out.PushBack(jsonStr, alloc);
             }
             break;
-            case ros_babel_fish::MessageTypes::Array: // Arrays of arrays are actually
-                                                      // not supported in the ROS msg
-                                                      // format
+            case ros_babel_fish::MessageTypes::Array:
+                // Arrays of arrays are actually not supported in the ROS msg format
+                break;
             case ros_babel_fish::MessageTypes::Compound: {
+                //                const auto& array =
+                //                    base.as<ros_babel_fish::ArrayMessage<ros_babel_fish::Message>>();
+                //                rapidjson::Value jsonArray;
+                //                jsonArray.SetArray();
+                //                jsonArray.Reserve(array.length(), alloc);
+                //                for(size_t i = 0; i < array.length(); ++i)
+                //                {
+                //                    rapidjson::Value jsonVal;
+                //                    jsonVal.SetObject();
+                //                    translatedMsgtoJson(array[i], jsonVal, alloc);
+                //                    jsonArray.PushBack(jsonVal, alloc);
+                //                }
+                //                out.PushBack(jsonArray, alloc);
+
                 const auto& array =
-                    base.as<ros_babel_fish::ArrayMessage<ros_babel_fish::Message>>();
-                rapidjson::Value jsonArray;
-                jsonArray.SetArray();
-                jsonArray.Reserve(array.length(), alloc);
-                for(size_t i = 0; i < array.length(); ++i)
-                {
-                    rapidjson::Value jsonVal;
-                    jsonVal.SetObject();
-                    translatedMsgtoJson(array[i], jsonVal, alloc);
-                    jsonArray.PushBack(jsonVal, alloc);
-                }
-                out.PushBack(jsonArray, alloc);
+                    // base.as<ros_babel_fish::ArrayMessage<ros_babel_fish::Message>>()[i];
+                    base.as<ros_babel_fish::CompoundArrayMessage>()[i];
+                rapidjson::Value obj;
+                obj.SetObject();
+                translatedMsgtoJson(array, obj, alloc);
+                out.PushBack(obj, alloc);
                 break;
             }
             }
@@ -170,16 +180,18 @@ void translatedMsgtoJson(const ros_babel_fish::Message& message, rapidjson::Valu
         case ros_babel_fish::MessageTypes::Time: {
             rapidjson::Value obj;
             obj.SetObject();
-            obj.AddMember("secs", message.value<ros::Time>().sec, alloc);
-            obj.AddMember("nsecs", message.value<ros::Time>().nsec, alloc);
+            const auto time = message.value<ros::Time>();
+            obj.AddMember("secs", time.sec, alloc);
+            obj.AddMember("nsecs", time.nsec, alloc);
             out = obj;
             break;
         }
         case ros_babel_fish::MessageTypes::Duration: {
             rapidjson::Value obj;
             obj.SetObject();
-            obj.AddMember("secs", message.value<ros::Duration>().sec, alloc);
-            obj.AddMember("nsecs", message.value<ros::Duration>().nsec, alloc);
+            const auto time = message.value<ros::Duration>();
+            obj.AddMember("secs", time.sec, alloc);
+            obj.AddMember("nsecs", time.nsec, alloc);
             out = obj;
             break;
         }
@@ -195,6 +207,17 @@ void toJson(ros_babel_fish::BabelFish& fish, const ros_babel_fish::BabelFishMess
 {
     ros_babel_fish::Message::Ptr babelFishMsg = fish.translateMessage(msg);
     translatedMsgtoJson(*babelFishMsg, doc, alloc);
+}
+
+std::string jsonToString(const rapidjson::Document& doc)
+{
+    rapidjson::StringBuffer jsonBuffer;
+    rapidjson::Writer<rapidjson::StringBuffer, rapidjson::UTF8<>, rapidjson::UTF8<>,
+                      rapidjson::CrtAllocator,
+                      rapidjson::kWriteDefaultFlags | rapidjson::kWriteNanAndInfFlag>
+        jsonWriter(jsonBuffer);
+    doc.Accept(jsonWriter);
+    return std::string{jsonBuffer.GetString()};
 }
 
 } // namespace ros_rapidjson_converter

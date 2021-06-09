@@ -1,16 +1,10 @@
 <launch>
-  <arg name="port" default="9090" />
-  <arg name="topics_glob" default="[*]" />
-  <arg name="services_glob" default="[*]" />
-  <arg name="params_glob" default="[*]" />
+  <env name="ROSCONSOLE_FORMAT" value="[${severity}] [${time}] [${function}:${line}]: ${message}" />
+  <env name="ROSCONSOLE_CONFIG_FILE" value="$(find p_rosbridge_server_cpp)/launch/rosconsole.config" />
+
+  <arg name="port" default="9091" />
 
   <node name="p_rosbridge_server_cpp" pkg="p_rosbridge_server_cpp" type="p_rosbridge_server_cpp_node" output="screen">
     <param name="port" value="$(arg port)"/>
-  </node>
-
-  <node name="rosapi" pkg="rosapi" type="rosapi_node" output="screen">
-    <param name="topics_glob" value="$(arg topics_glob)"/>
-    <param name="services_glob" value="$(arg services_glob)"/>
-    <param name="params_glob" value="$(arg params_glob)"/>
   </node>
 </launch>

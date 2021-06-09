@@ -16,10 +16,24 @@ void fillIntArray(const rapidjson::Value::ConstArray& jsonArray,
                   ros_babel_fish::ArrayMessageBase& baseArray)
 {
     auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<T>>();
-    assert(msgArray.length() >= jsonArray.Size());
+    if(msgArray.isFixedSize())
+    {
+        assert(msgArray.length() >= jsonArray.Size());
+    }
+    else
+    {
+        msgArray.reserve(jsonArray.Size());
+    }
     for(size_t i = 0; i < jsonArray.Size(); ++i)
     {
-        msgArray.assign(i, jsonArray[i].GetInt());
+        if(msgArray.isFixedSize())
+        {
+            msgArray.assign(i, jsonArray[i].GetInt());
+        }
+        else
+        {
+            msgArray.push_back(jsonArray[i].GetInt());
+        }
     }
 }
 
@@ -28,10 +42,24 @@ void fillUintArray(const rapidjson::Value::ConstArray& jsonArray,
                    ros_babel_fish::ArrayMessageBase& baseArray)
 {
     auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<T>>();
-    assert(msgArray.length() >= jsonArray.Size());
+    if(msgArray.isFixedSize())
+    {
+        assert(msgArray.length() >= jsonArray.Size());
+    }
+    else
+    {
+        msgArray.reserve(jsonArray.Size());
+    }
     for(size_t i = 0; i < jsonArray.Size(); ++i)
     {
-        msgArray.assign(i, jsonArray[i].GetUint());
+        if(msgArray.isFixedSize())
+        {
+            msgArray.assign(i, jsonArray[i].GetUint());
+        }
+        else
+        {
+            msgArray.push_back(jsonArray[i].GetUint());
+        }
     }
 }
 
