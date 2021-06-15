@@ -249,12 +249,15 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args,
         auto& compound = req->as<ros_babel_fish::CompoundMessage>();
         ros_rapidjson_converter::fillMessageFromJson(msg, compound);
 
-        auto serviceClient = std::make_shared<ServiceCallerWithTimeout>(
-            m_fish, args.serviceName, req, m_serviceTimeout);
+        // Allocated on heap, will be deleted by calling deleteLater itself later
+        // Used to properly delete in the timeoutThread
+        auto serviceClient = new ServiceCallerWithTimeout(m_fish, args.serviceName, req,
+                                                          m_serviceTimeout, this);
 
-        connect(serviceClient.get(), &ServiceCallerWithTimeout::success, this,
-                [this, serviceClient, id = args.id, serviceName = args.serviceName,
-                 client]() {
+        connect(serviceClient, &ServiceCallerWithTimeout::success, this,
+                [this, id = args.id, serviceName = args.serviceName, client]() {
+                    auto* serviceClient =
+                        qobject_cast<ServiceCallerWithTimeout*>(sender());
                     if(client != nullptr)
                     {
                         auto res = serviceClient->getResponse();
@@ -286,9 +289,8 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args,
                     serviceClient->disconnect();
                 });
 
-        connect(serviceClient.get(), &ServiceCallerWithTimeout::error, this,
-                [this, serviceClient, client,
-                 serviceName = args.serviceName](const QString& errorMsg) {
+        connect(serviceClient, &ServiceCallerWithTimeout::error, this,
+                [this, client, serviceName = args.serviceName](const QString& errorMsg) {
                     if(client != nullptr)
                     {
                         sendStatus(client, rbp::StatusLevel::Error,
@@ -296,10 +298,10 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args,
                     }
 
                     // Disconnect allows to drop all copies of serviceClient shared_ptr
-                    serviceClient->disconnect();
+                    sender()->disconnect();
                 });
-        connect(serviceClient.get(), &ServiceCallerWithTimeout::timeout, this,
-                [this, serviceClient, client, serviceName = args.serviceName]() {
+        connect(serviceClient, &ServiceCallerWithTimeout::timeout, this,
+                [this, client, serviceName = args.serviceName]() {
                     if(client != nullptr)
                     {
                         std::ostringstream ss;
@@ -308,7 +310,7 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args,
                     }
 
                     // Disconnect allows to drop all copies of serviceClient shared_ptr
-                    serviceClient->disconnect();
+                    sender()->disconnect();
                 });
 
         serviceClient->call();

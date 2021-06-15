@@ -17,7 +17,7 @@ public:
     ServiceCallerWithTimeout(const std::shared_ptr<ros_babel_fish::BabelFish>& fish,
                              const std::string& serviceName,
                              const ros_babel_fish::Message::Ptr& req,
-                             double serviceTimeout);
+                             double serviceTimeout, QObject* parent);
     ~ServiceCallerWithTimeout();
 
     void call();
@@ -39,6 +39,7 @@ private:
     // BabelFish object must only be used from the main thread!
     std::shared_ptr<ros_babel_fish::BabelFish> m_fish;
     std::thread m_serviceThread;
+    std::thread m_timeoutThread;
     ros::NodeHandle m_nh;
     ros::ServiceClient m_serviceClient;
     ros_babel_fish::BabelFishMessage::Ptr m_request;
