@@ -21,6 +21,11 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 find_package(Qt5 COMPONENTS Core Network WebSockets REQUIRED)
 
+if(CATKIN_ENABLE_TESTING AND ENABLE_COVERAGE_TESTING)
+  find_package(code_coverage REQUIRED)
+  # Add compiler flags for coverage instrumentation before defining any targets
+  APPEND_COVERAGE_COMPILER_FLAGS()
+endif()
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -225,6 +230,14 @@ if (CATKIN_ENABLE_TESTING)
   catkin_add_gtest(ROSJsonConverterTest test/test_ros_json_converter.cpp)
   if(TARGET ROSJsonConverterTest)
     target_link_libraries(ROSJsonConverterTest ${PROJECT_NAME} ${catkin_LIBRARIES})
+  endif()
+
+  if(ENABLE_COVERAGE_TESTING)
+    set(COVERAGE_EXCLUDES "*/${PROJECT_NAME}/test*" "*/${PROJECT_NAME}/src/rapidjson*")
+    add_code_coverage(
+      NAME ${PROJECT_NAME}_coverage_report
+      DEPENDENCIES ROSJsonConverterTest
+    )
   endif()
 
   ## Add folders to be run by python nosetests
