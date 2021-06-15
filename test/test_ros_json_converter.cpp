@@ -12,9 +12,6 @@
 #include <sensor_msgs/NavSatFix.h>
 #include <std_msgs/String.h>
 
-// TODO remove to not depend on this msg
-#include <wms_server/LayerInfoArray.h>
-
 #include "rapidjson/document.h"
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/writer.h"
@@ -106,47 +103,6 @@ void fillMessage(diagnostic_msgs::DiagnosticArray& m)
     }
     m.status.push_back(status2);
 }
-
-/// TODO remove
-
-inline wms_server::LayerInfo addLayer(const std::string& name)
-{
-    wms_server::LayerInfo l;
-    l.layer_name = name;
-    l.public_name = "public name";
-    l.topic = "/topic_name";
-    l.grid_map_layer = "gris_map_layer";
-    l.colormap.auto_minmax = true;
-    l.colormap.min_value = 10.0;
-    l.colormap.max_value = 100.0;
-    l.colormap.alpha = 1.0;
-    l.colormap.invert_colormap = true;
-    l.colormap.colormap_name = "RAINBOW";
-    l.colormap.available_colormaps = {"AUTUMN", "BONE",   "COOL",   "HOT",  "HSV",
-                                      "JET",    "OCEAN",  "PARULA", "PINK", "RAINBOW",
-                                      "SPRING", "SUMMER", "WINTER"};
-    l.colormap.colormap_values.reserve(256);
-    for(int i = 0; i < 256; ++i)
-    {
-        wms_server::RGBValue value;
-        value.r = i;
-        value.g = i + 1;
-        value.b = i + 2;
-        l.colormap.colormap_values.push_back(std::move(value));
-    }
-    return l;
-}
-
-inline void fillMessage(wms_server::LayerInfoArray& m)
-{
-    m.layers.push_back(addLayer("drix_1_count"));
-    m.layers.push_back(addLayer("drix_1_depth"));
-    m.layers.push_back(addLayer("drix_1_std_dev"));
-    m.layers.push_back(addLayer("drix_2_count"));
-    m.layers.push_back(addLayer("drix_2_depth"));
-    m.layers.push_back(addLayer("drix_2_std_dev"));
-}
-/// TODO remove
 
 TEST(JsonToROSTester, CanFillStringMsgFromJson)
 {
@@ -609,53 +565,6 @@ TEST(ROSToJsonTester, CanConvertSerializedPoseStampedToJsonTwice)
         EXPECT_EQ(
             json,
             R"({"header":{"seq":0,"stamp":{"secs":34325435,"nsecs":432423},"frame_id":"robot"},"pose":{"position":{"x":1.0,"y":2.0,"z":3.0},"orientation":{"x":1.0,"y":2.0,"z":3.0,"w":4.0}}})");
-    }
-}
-
-TEST(ROSToJsonTester, CanConvertSerializedLayerInfoArrayToJson)
-{
-    const std::string& datatype =
-        ros::message_traits::DataType<wms_server::LayerInfoArray>::value();
-    const std::string& definition =
-        ros::message_traits::Definition<wms_server::LayerInfoArray>::value();
-    const std::string& md5 =
-        ros::message_traits::MD5Sum<wms_server::LayerInfoArray>::value();
-
-    wms_server::LayerInfoArray msg;
-    fillMessage(msg);
-
-    // Create serialized version of the message
-    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
-
-    ros_babel_fish::BabelFishMessage bf_msg;
-    bf_msg.morph(md5, datatype, definition);
-    ros_babel_fish::BabelFish fish;
-
-    fish.descriptionProvider()->getMessageDescription(bf_msg);
-    ros::serialization::deserializeMessage(serialized_msg, bf_msg);
-
-    rapidjson::Document doc;
-    ros_rapidjson_converter::toJson(fish, bf_msg, doc, doc.GetAllocator());
-
-    const std::string json = ros_rapidjson_converter::jsonToString(doc);
-
-    rapidjson::Document outDoc;
-    outDoc.Parse(json);
-
-    ASSERT_TRUE(outDoc["layers"].IsArray());
-    const auto layersArray = outDoc["layers"].GetArray();
-
-    EXPECT_EQ(layersArray.Size(), 6);
-    for(auto& layerElem : layersArray)
-    {
-        ASSERT_TRUE(layerElem.IsObject());
-        const auto layer = layerElem.GetObj();
-        ASSERT_TRUE(layer.HasMember("colormap"));
-        ASSERT_TRUE(layer["colormap"].IsObject());
-        const auto colormap = layer["colormap"].GetObj();
-        ASSERT_TRUE(colormap["colormap_values"].IsArray());
-        const auto values = layer["colormap"]["colormap_values"].GetArray();
-        EXPECT_EQ(values.Size(), 256);
     }
 }
 
