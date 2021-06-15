@@ -50,6 +50,7 @@ class ROSNode : public QObject
     Q_OBJECT
 public:
     explicit ROSNode(QObject* parent = nullptr);
+    ~ROSNode();
 
 public slots:
     void onWSMessage(const QString& message);

@@ -53,6 +53,11 @@ ROSNode::ROSNode(QObject* parent)
     m_fish = std::make_shared<ros_babel_fish::BabelFish>();
 }
 
+ROSNode::~ROSNode()
+{
+    ROS_DEBUG_STREAM("~ROSNode");
+}
+
 void ROSNode::advertise(WSClient* client, const rbp::AdvertiseArgs& args)
 {
     if(const auto it = m_pubs.find(args.topic); it != m_pubs.end())

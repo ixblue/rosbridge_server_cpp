@@ -33,6 +33,12 @@ WSClient::WSClient(QWebSocket* ws) : QObject(nullptr), m_ws{ws}
     m_pingTimer.start(2000);
 }
 
+WSClient::~WSClient()
+{
+    ROS_DEBUG_STREAM("~WSClient " << name());
+    m_ws->deleteLater();
+}
+
 std::string WSClient::name() const
 {
     return m_ws->peerAddress().toString().toStdString() + ":" +
