@@ -315,12 +315,20 @@ void fillMessageFromJson(const rapidjson::Value& json,
         case ros_babel_fish::MessageTypes::None: break;
         case ros_babel_fish::MessageTypes::Bool: val = m.value.GetBool(); break;
         case ros_babel_fish::MessageTypes::UInt8:
+            val = static_cast<uint8_t>(m.value.GetUint());
+            break;
         case ros_babel_fish::MessageTypes::UInt16:
-        case ros_babel_fish::MessageTypes::UInt32:
+            val = static_cast<uint16_t>(m.value.GetUint());
+            break;
+        case ros_babel_fish::MessageTypes::UInt32: val = m.value.GetUint(); break;
         case ros_babel_fish::MessageTypes::UInt64: val = m.value.GetUint64(); break;
         case ros_babel_fish::MessageTypes::Int8:
+            val = static_cast<int8_t>(m.value.GetInt());
+            break;
         case ros_babel_fish::MessageTypes::Int16:
-        case ros_babel_fish::MessageTypes::Int32:
+            val = static_cast<int16_t>(m.value.GetInt());
+            break;
+        case ros_babel_fish::MessageTypes::Int32: val = m.value.GetInt(); break;
         case ros_babel_fish::MessageTypes::Int64: val = m.value.GetInt64(); break;
         case ros_babel_fish::MessageTypes::Float32: val = m.value.GetFloat(); break;
         case ros_babel_fish::MessageTypes::Float64: val = m.value.GetDouble(); break;

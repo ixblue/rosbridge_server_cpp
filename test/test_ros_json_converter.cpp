@@ -66,7 +66,7 @@ void fillMessage(diagnostic_msgs::DiagnosticArray& m)
     diagnostic_msgs::DiagnosticStatus status1;
     status1.level = 2; // ERROR
     status1.name = "status1";
-    status1.message = "message";
+    status1.message = "message1";
     {
         diagnostic_msgs::KeyValue val1;
         val1.key = "key1";
@@ -102,6 +102,26 @@ void fillMessage(diagnostic_msgs::DiagnosticArray& m)
         status2.values.push_back(val3);
     }
     m.status.push_back(status2);
+}
+
+void fillMessage(sensor_msgs::Image& m)
+{
+    m.header.stamp.sec = 123;
+    m.header.stamp.nsec = 456;
+    m.header.frame_id = "frame_id";
+    m.header.seq = 123;
+
+    m.width = 2;
+    m.height = 3;
+    m.encoding = "bgr8";
+    m.is_bigendian = 0;
+    m.step = m.width * 3;
+    m.data.resize(m.width * m.height * 3);
+    uint8_t i = 0;
+    for(auto& pixel : m.data)
+    {
+        pixel = i++;
+    }
 }
 
 TEST(JsonToROSTester, CanFillStringMsgFromJson)
@@ -309,6 +329,30 @@ TEST(JsonToROSTester, CanFillPointStampedMsgFromJsonWithStampMissing)
     EXPECT_EQ(compound["point"]["z"].value<double>(), 7.8);
 }
 
+TEST(JsonToROSTester, CanFillPointStampedMsggFromJsonWithStampMissing)
+{
+    // position.z is missing
+    const auto jsonData =
+        R"({"header":{"frame_id":"robot","seq":2},"point":{"x":5.6,"y":6.7,"z":7.8}})";
+    rapidjson::Document doc;
+    doc.Parse(jsonData);
+    ASSERT_FALSE(doc.HasParseError());
+    ros_babel_fish::BabelFish fish;
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(
+                        fish, "geometry_msgs/PointStamped", g_rosTime, doc));
+    ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+    EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(), "robot");
+    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 2);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 34325437);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 432427);
+    EXPECT_EQ(compound["point"]["x"].value<double>(), 5.6);
+    EXPECT_EQ(compound["point"]["y"].value<double>(), 6.7);
+    EXPECT_EQ(compound["point"]["z"].value<double>(), 7.8);
+}
+
 TEST(JsonToROSTester, CanFillNavSatFixFromJSON)
 {
     const auto jsonData =
@@ -328,10 +372,8 @@ TEST(JsonToROSTester, CanFillNavSatFixFromJSON)
         ros::serialization::serializeMessage(expectedMsg);
 
     // Compare ROS encoded message
-    // ASSERT_EQ(rosMsg->size(), serializedExpectedMsg.num_bytes);
-    ASSERT_EQ(rosMsg->size(),
-              (serializedExpectedMsg.num_bytes -
-               (serializedExpectedMsg.message_start - serializedExpectedMsg.buf.get())));
+    EXPECT_EQ(serializedExpectedMsg.message_start - serializedExpectedMsg.buf.get(), 4);
+    ASSERT_EQ(rosMsg->size(), serializedExpectedMsg.num_bytes - 4);
     EXPECT_EQ(std::memcmp(rosMsg->buffer(), serializedExpectedMsg.message_start,
                           rosMsg->size()),
               0);
@@ -340,26 +382,31 @@ TEST(JsonToROSTester, CanFillNavSatFixFromJSON)
     ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
-    EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(), "frame_id");
-    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 123);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 1000);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 10000);
-    EXPECT_EQ(compound["status"]["status"].value<int8_t>(), 1);
-    EXPECT_EQ(compound["status"]["service"].value<uint16_t>(), 4);
-    EXPECT_EQ(compound["latitude"].value<double>(), 123.456);
-    EXPECT_EQ(compound["longitude"].value<double>(), 654.321);
-    EXPECT_EQ(compound["position_covariance_type"].value<uint8_t>(), 2);
+    EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(),
+              expectedMsg.header.frame_id);
+    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), expectedMsg.header.seq);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec,
+              expectedMsg.header.stamp.sec);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec,
+              expectedMsg.header.stamp.nsec);
+    EXPECT_EQ(compound["status"]["status"].value<int8_t>(), expectedMsg.status.status);
+    EXPECT_EQ(compound["status"]["service"].value<uint16_t>(),
+              expectedMsg.status.service);
+    EXPECT_EQ(compound["latitude"].value<double>(), expectedMsg.latitude);
+    EXPECT_EQ(compound["longitude"].value<double>(), expectedMsg.longitude);
+    EXPECT_EQ(compound["position_covariance_type"].value<uint8_t>(),
+              expectedMsg.position_covariance_type);
     auto& base = compound["position_covariance"].as<ros_babel_fish::ArrayMessageBase>();
     auto& array = base.as<ros_babel_fish::ArrayMessage<double>>();
-    EXPECT_EQ(array[0], 1.1);
-    EXPECT_EQ(array[4], 2.2);
-    EXPECT_EQ(array[8], 3.3);
+    EXPECT_EQ(array[0], expectedMsg.position_covariance[0]);
+    EXPECT_EQ(array[4], expectedMsg.position_covariance[4]);
+    EXPECT_EQ(array[8], expectedMsg.position_covariance[8]);
 }
 
 TEST(JsonToROSTester, CanFillDiagnosticArrayFromJSON)
 {
     const auto jsonData = R"({
-        "header":{"seq":0,"stamp":{"secs":1000,"nsecs":10000},"frame_id":"frame_id"},
+        "header":{"seq":0,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},
         "status": [
             {
                 "level":2,
@@ -410,82 +457,119 @@ TEST(JsonToROSTester, CanFillDiagnosticArrayFromJSON)
     ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(
                         fish, "diagnostic_msgs/DiagnosticArray", g_rosTime, doc));
 
-    sensor_msgs::NavSatFix expectedMsg;
+    diagnostic_msgs::DiagnosticArray expectedMsg;
     fillMessage(expectedMsg);
     ros::SerializedMessage serializedExpectedMsg =
         ros::serialization::serializeMessage(expectedMsg);
 
     // Compare ROS encoded message
-    //    ASSERT_EQ(rosMsg->size(),
-    //              (serializedExpectedMsg.num_bytes -
-    //               (serializedExpectedMsg.message_start -
-    //               serializedExpectedMsg.buf.get())));
-    //    EXPECT_EQ(std::memcmp(rosMsg->buffer(), serializedExpectedMsg.message_start,
-    //                          rosMsg->size()),
-    //              0);
+    ASSERT_EQ(rosMsg->size(), serializedExpectedMsg.num_bytes - 4);
+    EXPECT_EQ(std::memcmp(rosMsg->buffer(), serializedExpectedMsg.message_start,
+                          rosMsg->size()),
+              0);
 
     // Compare values
     ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
-    EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(), "frame_id");
-    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 0);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 1000);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 10000);
+    EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(),
+              expectedMsg.header.frame_id);
+    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), expectedMsg.header.seq);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec,
+              expectedMsg.header.stamp.sec);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec,
+              expectedMsg.header.stamp.nsec);
     auto& status = compound["status"].as<ros_babel_fish::CompoundArrayMessage>();
-    ASSERT_EQ(status.length(), 2);
+    ASSERT_EQ(status.length(), expectedMsg.status.size());
     {
         auto& status1 = status[0];
-        EXPECT_EQ(status1["level"].value<uint8_t>(), 2);
-        EXPECT_EQ(status1["name"].value<std::string>(), "status1");
-        EXPECT_EQ(status1["message"].value<std::string>(), "message1");
+        const auto& es1 = expectedMsg.status[0];
+        EXPECT_EQ(status1["level"].value<uint8_t>(), es1.level);
+        EXPECT_EQ(status1["name"].value<std::string>(), es1.name);
+        EXPECT_EQ(status1["message"].value<std::string>(), es1.message);
+        // empty, not in JSON
+        EXPECT_EQ(status1["hardware_id"].value<std::string>(), es1.hardware_id);
         auto& values1 = status1["values"].as<ros_babel_fish::CompoundArrayMessage>();
-        ASSERT_EQ(values1.length(), 3);
-        EXPECT_EQ(values1[0]["key"].value<std::string>(), "key1");
-        EXPECT_EQ(values1[0]["value"].value<std::string>(), "value1");
-        EXPECT_EQ(values1[1]["key"].value<std::string>(), "key2");
-        EXPECT_EQ(values1[1]["value"].value<std::string>(), "value2");
-        EXPECT_EQ(values1[2]["key"].value<std::string>(), "key3");
-        EXPECT_EQ(values1[2]["value"].value<std::string>(), "value3");
+        ASSERT_EQ(values1.length(), es1.values.size());
+        EXPECT_EQ(values1[0]["key"].value<std::string>(), es1.values[0].key);
+        EXPECT_EQ(values1[0]["value"].value<std::string>(), es1.values[0].value);
+        EXPECT_EQ(values1[1]["key"].value<std::string>(), es1.values[1].key);
+        EXPECT_EQ(values1[1]["value"].value<std::string>(), es1.values[1].value);
+        EXPECT_EQ(values1[2]["key"].value<std::string>(), es1.values[2].key);
+        EXPECT_EQ(values1[2]["value"].value<std::string>(), es1.values[2].value);
     }
     {
         auto& status2 = status[1];
-        EXPECT_EQ(status2["level"].value<uint8_t>(), 1);
-        EXPECT_EQ(status2["name"].value<std::string>(), "status2");
-        EXPECT_EQ(status2["message"].value<std::string>(), "message2");
+        const auto& es2 = expectedMsg.status[1];
+        EXPECT_EQ(status2["level"].value<uint8_t>(), es2.level);
+        EXPECT_EQ(status2["name"].value<std::string>(), es2.name);
+        EXPECT_EQ(status2["message"].value<std::string>(), es2.message);
+        EXPECT_EQ(status2["hardware_id"].value<std::string>(), es2.hardware_id);
         auto& values2 = status2["values"].as<ros_babel_fish::CompoundArrayMessage>();
-        ASSERT_EQ(values2.length(), 3);
-        EXPECT_EQ(values2[0]["key"].value<std::string>(), "key1");
-        EXPECT_EQ(values2[0]["value"].value<std::string>(), "value11");
-        EXPECT_EQ(values2[1]["key"].value<std::string>(), "key2");
-        EXPECT_EQ(values2[1]["value"].value<std::string>(), "value22");
-        EXPECT_EQ(values2[2]["key"].value<std::string>(), "key3");
-        EXPECT_EQ(values2[2]["value"].value<std::string>(), "value33");
+        ASSERT_EQ(values2.length(), es2.values.size());
+        EXPECT_EQ(values2[0]["key"].value<std::string>(), es2.values[0].key);
+        EXPECT_EQ(values2[0]["value"].value<std::string>(), es2.values[0].value);
+        EXPECT_EQ(values2[1]["key"].value<std::string>(), es2.values[1].key);
+        EXPECT_EQ(values2[1]["value"].value<std::string>(), es2.values[1].value);
+        EXPECT_EQ(values2[2]["key"].value<std::string>(), es2.values[2].key);
+        EXPECT_EQ(values2[2]["value"].value<std::string>(), es2.values[2].value);
     }
 }
 
-TEST(JsonToROSTester, CanFillLayerInfoArrayMsgFromJsonWithStampMissing)
+TEST(JsonToROSTester, CanFillImageFromJSON)
 {
-    // position.z is missing
-    const auto jsonData =
-        R"({"header":{"frame_id":"robot","seq":2},"point":{"x":5.6,"y":6.7,"z":7.8}})";
+    const auto jsonData = R"({
+        "header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},
+        "width":2,
+        "height":3,
+        "encoding":"bgr8",
+        "is_bigendian":0,
+        "step":6,
+        "data":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]
+    })";
+
     rapidjson::Document doc;
     doc.Parse(jsonData);
     ASSERT_FALSE(doc.HasParseError());
     ros_babel_fish::BabelFish fish;
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
-    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(
-                        fish, "geometry_msgs/PointStamped", g_rosTime, doc));
+    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(fish, "sensor_msgs/Image",
+                                                                g_rosTime, doc));
+
+    sensor_msgs::Image expectedMsg;
+    fillMessage(expectedMsg);
+    ros::SerializedMessage serializedExpectedMsg =
+        ros::serialization::serializeMessage(expectedMsg);
+
+    // Compare ROS encoded message
+    ASSERT_EQ(rosMsg->size(), serializedExpectedMsg.num_bytes - 4);
+    EXPECT_EQ(std::memcmp(rosMsg->buffer(), serializedExpectedMsg.message_start,
+                          rosMsg->size()),
+              0);
+
+    // Compare values
     ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
-    EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(), "robot");
-    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 2);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 34325437);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 432427);
-    EXPECT_EQ(compound["point"]["x"].value<double>(), 5.6);
-    EXPECT_EQ(compound["point"]["y"].value<double>(), 6.7);
-    EXPECT_EQ(compound["point"]["z"].value<double>(), 7.8);
+    EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(),
+              expectedMsg.header.frame_id);
+    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), expectedMsg.header.seq);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec,
+              expectedMsg.header.stamp.sec);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec,
+              expectedMsg.header.stamp.nsec);
+    EXPECT_EQ(compound["width"].value<uint32_t>(), expectedMsg.width);
+    EXPECT_EQ(compound["height"].value<uint32_t>(), expectedMsg.height);
+    EXPECT_EQ(compound["step"].value<uint32_t>(), expectedMsg.step);
+    EXPECT_EQ(compound["is_bigendian"].value<uint8_t>(), expectedMsg.is_bigendian);
+    EXPECT_EQ(compound["encoding"].value<std::string>(), expectedMsg.encoding);
+    auto& base = compound["data"].as<ros_babel_fish::ArrayMessageBase>();
+    auto& array = base.as<ros_babel_fish::ArrayMessage<uint8_t>>();
+    ASSERT_EQ(array.length(), expectedMsg.data.size());
+    for(size_t i = 0; i < array.length(); ++i)
+    {
+        EXPECT_EQ(array[i], expectedMsg.data[i]);
+    }
 }
 
 /////////////////
@@ -566,6 +650,101 @@ TEST(ROSToJsonTester, CanConvertSerializedPoseStampedToJsonTwice)
             json,
             R"({"header":{"seq":0,"stamp":{"secs":34325435,"nsecs":432423},"frame_id":"robot"},"pose":{"position":{"x":1.0,"y":2.0,"z":3.0},"orientation":{"x":1.0,"y":2.0,"z":3.0,"w":4.0}}})");
     }
+}
+
+TEST(ROSToJsonTester, CanConvertNavSatFixToJson)
+{
+    const std::string& datatype =
+        ros::message_traits::DataType<sensor_msgs::NavSatFix>::value();
+    const std::string& definition =
+        ros::message_traits::Definition<sensor_msgs::NavSatFix>::value();
+    const std::string& md5 = ros::message_traits::MD5Sum<sensor_msgs::NavSatFix>::value();
+
+    sensor_msgs::NavSatFix msg;
+    fillMessage(msg);
+
+    // Create serialized version of the message
+    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
+
+    ros_babel_fish::BabelFishMessage bf_msg;
+    bf_msg.morph(md5, datatype, definition);
+    ros_babel_fish::BabelFish fish;
+
+    fish.descriptionProvider()->getMessageDescription(bf_msg);
+    ros::serialization::deserializeMessage(serialized_msg, bf_msg);
+
+    rapidjson::Document doc;
+    ros_rapidjson_converter::toJson(fish, bf_msg, doc, doc.GetAllocator());
+
+    const std::string json = ros_rapidjson_converter::jsonToString(doc);
+
+    const auto expectedJson =
+        R"({"header":{"seq":123,"stamp":{"secs":1000,"nsecs":10000},"frame_id":"frame_id"},"status":{"status":1,"service":4},"latitude":123.456,"longitude":654.321,"altitude":100.101,"position_covariance":[1.1,0.0,0.0,0.0,2.2,0.0,0.0,0.0,3.3],"position_covariance_type":2})";
+
+    EXPECT_EQ(json, expectedJson);
+}
+
+TEST(ROSToJsonTester, CanConvertDiagnosticArrayToJson)
+{
+    const std::string& datatype =
+        ros::message_traits::DataType<diagnostic_msgs::DiagnosticArray>::value();
+    const std::string& definition =
+        ros::message_traits::Definition<diagnostic_msgs::DiagnosticArray>::value();
+    const std::string& md5 =
+        ros::message_traits::MD5Sum<diagnostic_msgs::DiagnosticArray>::value();
+
+    diagnostic_msgs::DiagnosticArray msg;
+    fillMessage(msg);
+
+    // Create serialized version of the message
+    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
+
+    ros_babel_fish::BabelFishMessage bf_msg;
+    bf_msg.morph(md5, datatype, definition);
+    ros_babel_fish::BabelFish fish;
+
+    fish.descriptionProvider()->getMessageDescription(bf_msg);
+    ros::serialization::deserializeMessage(serialized_msg, bf_msg);
+
+    rapidjson::Document doc;
+    ros_rapidjson_converter::toJson(fish, bf_msg, doc, doc.GetAllocator());
+
+    const std::string json = ros_rapidjson_converter::jsonToString(doc);
+
+    const auto expectedJson =
+        R"({"header":{"seq":0,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},"status":[{"level":2,"name":"status1","message":"message1","hardware_id":"","values":[{"key":"key1","value":"value1"},{"key":"key2","value":"value2"},{"key":"key3","value":"value3"}]},{"level":1,"name":"status2","message":"message2","hardware_id":"","values":[{"key":"key1","value":"value11"},{"key":"key2","value":"value22"},{"key":"key3","value":"value33"}]}]})";
+
+    EXPECT_EQ(json, expectedJson);
+}
+
+TEST(ROSToJsonTester, CanConvertImageToJson)
+{
+    const std::string& datatype =
+        ros::message_traits::DataType<sensor_msgs::Image>::value();
+    const std::string& definition =
+        ros::message_traits::Definition<sensor_msgs::Image>::value();
+    const std::string& md5 = ros::message_traits::MD5Sum<sensor_msgs::Image>::value();
+
+    sensor_msgs::Image msg;
+    fillMessage(msg);
+
+    // Create serialized version of the message
+    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
+
+    ros_babel_fish::BabelFishMessage bf_msg;
+    bf_msg.morph(md5, datatype, definition);
+    ros_babel_fish::BabelFish fish;
+
+    fish.descriptionProvider()->getMessageDescription(bf_msg);
+    ros::serialization::deserializeMessage(serialized_msg, bf_msg);
+
+    rapidjson::Document doc;
+    ros_rapidjson_converter::toJson(fish, bf_msg, doc, doc.GetAllocator());
+
+    const std::string json = ros_rapidjson_converter::jsonToString(doc);
+    const auto expectedJson =
+        R"({"header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},"height":3,"width":2,"encoding":"bgr8","is_bigendian":0,"step":6,"data":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]})";
+    EXPECT_EQ(json, expectedJson);
 }
 
 int main(int argc, char** argv)

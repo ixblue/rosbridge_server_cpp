@@ -110,22 +110,7 @@ void translatedMsgtoJson(const ros_babel_fish::Message& message, rapidjson::Valu
                 // Arrays of arrays are actually not supported in the ROS msg format
                 break;
             case ros_babel_fish::MessageTypes::Compound: {
-                //                const auto& array =
-                //                    base.as<ros_babel_fish::ArrayMessage<ros_babel_fish::Message>>();
-                //                rapidjson::Value jsonArray;
-                //                jsonArray.SetArray();
-                //                jsonArray.Reserve(array.length(), alloc);
-                //                for(size_t i = 0; i < array.length(); ++i)
-                //                {
-                //                    rapidjson::Value jsonVal;
-                //                    jsonVal.SetObject();
-                //                    translatedMsgtoJson(array[i], jsonVal, alloc);
-                //                    jsonArray.PushBack(jsonVal, alloc);
-                //                }
-                //                out.PushBack(jsonArray, alloc);
-
                 const auto& array =
-                    // base.as<ros_babel_fish::ArrayMessage<ros_babel_fish::Message>>()[i];
                     base.as<ros_babel_fish::CompoundArrayMessage>()[i];
                 rapidjson::Value obj;
                 obj.SetObject();
