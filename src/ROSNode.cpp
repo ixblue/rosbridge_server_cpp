@@ -7,6 +7,7 @@
 #include "rapidjson/writer.h"
 
 #include "ROSNode.h"
+#include "ServiceCallerWithTimeout.h"
 #include "WSClient.h"
 #include "rapidjson_to_ros.h"
 #include "ros_to_rapidjson.h"
@@ -31,8 +32,11 @@ ROSNode::ROSNode(QObject* parent)
                callServiceHandler(c, j, id);
            }}}
 {
+    // Parameters
     int port = 9090;
     m_nh.getParam("port", port);
+    m_nh.getParam("service_timeout", m_serviceTimeout);
+
     ROS_INFO_STREAM("Start WS on port: " << port);
 
     if(!m_wsServer.listen(QHostAddress::Any, port))
@@ -45,6 +49,8 @@ ROSNode::ROSNode(QObject* parent)
     connect(&m_wsServer, &QWebSocketServer::newConnection, this,
             &ROSNode::onNewWSConnection);
     connect(&m_wsServer, &QWebSocketServer::serverError, this, &ROSNode::onWSServerError);
+
+    m_fish = std::make_shared<ros_babel_fish::BabelFish>();
 }
 
 void ROSNode::advertise(WSClient* client, const rbp::AdvertiseArgs& args)
@@ -68,7 +74,7 @@ void ROSNode::advertise(WSClient* client, const rbp::AdvertiseArgs& args)
     {
         try
         {
-            const auto dummyMsg = m_fish.createMessage(args.type);
+            const auto dummyMsg = m_fish->createMessage(args.type);
         }
         catch(const ros_babel_fish::BabelFishException&)
         {
@@ -81,8 +87,8 @@ void ROSNode::advertise(WSClient* client, const rbp::AdvertiseArgs& args)
         ROS_DEBUG_STREAM("Create a new publisher on topic: " << args.topic);
         m_pubs.emplace(args.topic,
                        ROSBridgePublisher{args.type,
-                                          m_fish.advertise(m_nh, args.type, args.topic,
-                                                           args.queueSize, args.latched),
+                                          m_fish->advertise(m_nh, args.type, args.topic,
+                                                            args.queueSize, args.latched),
                                           {client}});
     }
 }
@@ -116,7 +122,7 @@ void ROSNode::publish(WSClient* client, const rbp::PublishArgs& args,
         try
         {
             ros_babel_fish::BabelFishMessage::Ptr rosMsg =
-                ros_rapidjson_converter::createMsg(m_fish, it->second.type,
+                ros_rapidjson_converter::createMsg(*m_fish, it->second.type,
                                                    ros::Time::now(), msg);
 
             ROS_DEBUG_STREAM("Publish a msg on topic " << args.topic);
@@ -180,7 +186,7 @@ void ROSNode::subscribe(WSClient* client, const rbp::SubscribeArgs& args)
             // Try to create a msg to check that we can find it
             try
             {
-                const auto dummyMsg = m_fish.createMessage(args.type);
+                const auto dummyMsg = m_fish->createMessage(args.type);
             }
             catch(const ros_babel_fish::BabelFishException&)
             {
@@ -236,34 +242,76 @@ void ROSNode::unsubscribe(WSClient* client, const rbp::UnsubscribeArgs& args)
 void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args,
                           const rapidjson::Value& msg)
 {
-    // TODO spawn a new thread with timeout
-
+    ROS_INFO_STREAM("Call service " << args.serviceName);
     try
     {
-        ros_babel_fish::Message::Ptr req = m_fish.createServiceRequest(args.serviceType);
+        ros_babel_fish::Message::Ptr req = m_fish->createServiceRequest(args.serviceType);
         auto& compound = req->as<ros_babel_fish::CompoundMessage>();
         ros_rapidjson_converter::fillMessageFromJson(msg, compound);
-        ros_babel_fish::TranslatedMessage::Ptr res;
-        if(m_fish.callService(args.serviceName, req, res))
-        {
-            res->translated_message->as<ros_babel_fish::CompoundMessage>();
 
-            rapidjson::Document jsonDoc;
-            jsonDoc.SetObject();
-            jsonDoc.AddMember("op", "service_response", jsonDoc.GetAllocator());
-            if(!args.id.empty())
-            {
-                jsonDoc.AddMember("id", args.id, jsonDoc.GetAllocator());
-            }
-            jsonDoc.AddMember("service", args.serviceName, jsonDoc.GetAllocator());
-            rapidjson::Value jsonMsg;
-            ros_rapidjson_converter::translatedMsgtoJson(*res->translated_message,
-                                                         jsonMsg, jsonDoc.GetAllocator());
-            jsonDoc.AddMember("values", jsonMsg, jsonDoc.GetAllocator());
-            jsonDoc.AddMember("result", true, jsonDoc.GetAllocator());
+        auto serviceClient = std::make_shared<ServiceCallerWithTimeout>(
+            m_fish, args.serviceName, req, m_serviceTimeout);
 
-            sendJson(client, jsonDoc);
-        }
+        connect(serviceClient.get(), &ServiceCallerWithTimeout::success, this,
+                [this, serviceClient, id = args.id, serviceName = args.serviceName,
+                 client]() {
+                    if(client != nullptr)
+                    {
+                        auto res = serviceClient->getResponse();
+
+                        rapidjson::Document jsonDoc;
+                        jsonDoc.SetObject();
+                        jsonDoc.AddMember("op", "service_response",
+                                          jsonDoc.GetAllocator());
+                        if(!id.empty())
+                        {
+                            jsonDoc.AddMember("id", id, jsonDoc.GetAllocator());
+                        }
+                        jsonDoc.AddMember("service", serviceName, jsonDoc.GetAllocator());
+                        rapidjson::Value jsonMsg;
+                        ros_rapidjson_converter::translatedMsgtoJson(
+                            *res->translated_message, jsonMsg, jsonDoc.GetAllocator());
+                        jsonDoc.AddMember("values", jsonMsg, jsonDoc.GetAllocator());
+                        jsonDoc.AddMember("result", true, jsonDoc.GetAllocator());
+
+                        sendJson(client, jsonDoc);
+                    }
+                    else
+                    {
+                        ROS_ERROR_STREAM("Received response for service "
+                                         << serviceName << " but client ptr is now null");
+                    }
+
+                    // Disconnect allows to drop all copies of serviceClient shared_ptr
+                    serviceClient->disconnect();
+                });
+
+        connect(serviceClient.get(), &ServiceCallerWithTimeout::error, this,
+                [this, serviceClient, client,
+                 serviceName = args.serviceName](const QString& errorMsg) {
+                    if(client != nullptr)
+                    {
+                        sendStatus(client, rbp::StatusLevel::Error,
+                                   errorMsg.toStdString());
+                    }
+
+                    // Disconnect allows to drop all copies of serviceClient shared_ptr
+                    serviceClient->disconnect();
+                });
+        connect(serviceClient.get(), &ServiceCallerWithTimeout::timeout, this,
+                [this, serviceClient, client, serviceName = args.serviceName]() {
+                    if(client != nullptr)
+                    {
+                        std::ostringstream ss;
+                        ss << "Service " << serviceName << " call timeout";
+                        sendStatus(client, rbp::StatusLevel::Error, ss.str());
+                    }
+
+                    // Disconnect allows to drop all copies of serviceClient shared_ptr
+                    serviceClient->disconnect();
+                });
+
+        serviceClient->call();
     }
     catch(const ros_babel_fish::BabelFishException& e)
     {
@@ -280,7 +328,7 @@ void ROSNode::onWSMessage(const QString& message)
     ROS_DEBUG_STREAM_NAMED("json",
                            "<- Received on ws: '" << message.toStdString() << "'");
 
-    auto client = qobject_cast<WSClient*>(sender());
+    auto* client = qobject_cast<WSClient*>(sender());
 
     rapidjson::Document doc;
     doc.Parse(message.toUtf8());
@@ -396,7 +444,7 @@ void ROSNode::onWSServerError(QWebSocketProtocol::CloseCode error)
 void ROSNode::handleROSMessage(const std::string& topic,
                                const ros_babel_fish::BabelFishMessage::ConstPtr& msg)
 {
-    ROS_DEBUG_STREAM("Handle ROS msg on topic " << topic);
+    ROS_DEBUG_STREAM_NAMED("topic", "Handle ROS msg on topic " << topic);
     QElapsedTimer t;
     t.start();
 
@@ -405,18 +453,19 @@ void ROSNode::handleROSMessage(const std::string& topic,
     jsonDoc.AddMember("op", "publish", jsonDoc.GetAllocator());
     jsonDoc.AddMember("topic", topic, jsonDoc.GetAllocator());
     rapidjson::Value jsonMsg;
-    ros_rapidjson_converter::toJson(m_fish, *msg, jsonMsg, jsonDoc.GetAllocator());
+    ros_rapidjson_converter::toJson(*m_fish, *msg, jsonMsg, jsonDoc.GetAllocator());
     jsonDoc.AddMember("msg", jsonMsg, jsonDoc.GetAllocator());
 
-    ROS_DEBUG_STREAM("Converted message on topic "
-                     << topic << " to rapidjson::Document in " << t.nsecsElapsed() / 1000
-                     << " us");
+    ROS_DEBUG_STREAM_NAMED("topic", "Converted message on topic "
+                                        << topic << " to rapidjson::Document in "
+                                        << t.nsecsElapsed() / 1000 << " us");
     t.start();
     // Encode to json only once
     const std::string jsonStr = ros_rapidjson_converter::jsonToString(jsonDoc);
 
-    ROS_DEBUG_STREAM("Converted message on topic " << topic << " from json to string in "
-                                                   << t.nsecsElapsed() / 1000 << " us");
+    ROS_DEBUG_STREAM_NAMED("topic", "Converted message on topic "
+                                        << topic << " from json to string in "
+                                        << t.nsecsElapsed() / 1000 << " us");
 
     if(const auto it = m_subs.find(topic); it != m_subs.end())
     {
@@ -424,9 +473,9 @@ void ROSNode::handleROSMessage(const std::string& topic,
         {
             if(client->client->isReady())
             {
-                // if(client->throttleRate_ms == 0 ||
-                //   (ros::Time::now() - client->lastTimeMsgSent).toSec() >
-                //       client->throttleRate_ms / 1000.)
+                if(client->throttleRate_ms == 0 ||
+                   (ros::Time::now() - client->lastTimeMsgSent).toSec() >
+                       client->throttleRate_ms / 1000.)
                 {
                     sendMsg(client->client, jsonStr);
                     client->lastTimeMsgSent = ros::Time::now();

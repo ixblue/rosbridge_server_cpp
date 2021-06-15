@@ -19,6 +19,7 @@
 #include "rosbridge_protocol.h"
 
 class WSClient;
+class ServiceCallerWithTimeout;
 
 struct ROSBridgePublisher
 {
@@ -42,7 +43,6 @@ struct ROSBridgeSubscriber
 {
     ros::Subscriber sub;
     std::vector<std::shared_ptr<SubscriberClient>> clients;
-    // std::function<void(const ros_babel_fish::BabelFishMessage&)> cb;
 };
 
 class ROSNode : public QObject
@@ -52,18 +52,6 @@ public:
     explicit ROSNode(QObject* parent = nullptr);
 
 public slots:
-
-    //    void unadvertise(const QString& id, const QString& topic);
-    //    void publish(const QString& id, const QString& topic, const rapidjson::Value&
-    //    msg); void subscribe(const QString& id, const QString& topic, const QString&
-    //    type,
-    //                   unsigned int queueSize, int throttleRate, int fragmentSize,
-    //                   const QString& compression);
-    //    void unsubscribe(const QString& id, const QString& topic);
-    //    void callService(const QString& id, const QString& serviceName,
-    //                     const QString& serviceType, const rapidjson::Value& args,
-    //                     int fragmentSize, const QString& compression);
-
     void onWSMessage(const QString& message);
     void onWSClientDisconnected();
 
@@ -95,6 +83,9 @@ private slots:
     void callService(WSClient* client, const rosbridge_protocol::CallServiceArgs& args,
                      const rapidjson::Value& msg);
 
+signals:
+    void deleteServiceClient(const QString& serviceName);
+
 private:
     void handleROSMessage(const std::string& topic,
                           const ros_babel_fish::BabelFishMessage::ConstPtr& msg);
@@ -106,7 +97,7 @@ private:
     ros::NodeHandle m_nh;
     std::map<std::string, ROSBridgePublisher> m_pubs;
     std::map<std::string, ROSBridgeSubscriber> m_subs;
-    ros_babel_fish::BabelFish m_fish;
+    std::shared_ptr<ros_babel_fish::BabelFish> m_fish;
 
     QWebSocketServer m_wsServer;
     std::vector<std::shared_ptr<WSClient>> m_clients;
@@ -114,4 +105,7 @@ private:
     std::map<std::string,
              std::function<void(WSClient*, const rapidjson::Value&, const std::string&)>>
         m_opHandlers;
+
+    // Parameters
+    double m_serviceTimeout = 5.0;
 };

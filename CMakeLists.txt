@@ -132,6 +132,7 @@ include_directories(
 add_library(${PROJECT_NAME}
     src/ROSNode.cpp
     src/WSClient.cpp
+    src/ServiceCallerWithTimeout.cpp
     src/ros_to_rapidjson.cpp
     src/rapidjson_to_ros.cpp
 )
