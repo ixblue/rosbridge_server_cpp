@@ -9,7 +9,7 @@ void fillBoolArray(const rapidjson::Value::ConstArray& jsonArray,
     auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<bool>>();
     if(msgArray.isFixedSize())
     {
-        assert(msgArray.length() >= jsonArray.Size());
+        assert(msgArray.length() == jsonArray.Size());
     }
     else
     {
@@ -34,7 +34,7 @@ void fillUint64Array(const rapidjson::Value::ConstArray& jsonArray,
     auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<uint64_t>>();
     if(msgArray.isFixedSize())
     {
-        assert(msgArray.length() >= jsonArray.Size());
+        assert(msgArray.length() == jsonArray.Size());
     }
     else
     {
@@ -59,7 +59,7 @@ void fillInt64Array(const rapidjson::Value::ConstArray& jsonArray,
     auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<int64_t>>();
     if(msgArray.isFixedSize())
     {
-        assert(msgArray.length() >= jsonArray.Size());
+        assert(msgArray.length() == jsonArray.Size());
     }
     else
     {
@@ -84,7 +84,7 @@ void fillFloatArray(const rapidjson::Value::ConstArray& jsonArray,
     auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<float>>();
     if(msgArray.isFixedSize())
     {
-        assert(msgArray.length() >= jsonArray.Size());
+        assert(msgArray.length() == jsonArray.Size());
     }
     else
     {
@@ -109,7 +109,7 @@ void fillDoubleArray(const rapidjson::Value::ConstArray& jsonArray,
     auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<double>>();
     if(msgArray.isFixedSize())
     {
-        assert(msgArray.length() >= jsonArray.Size());
+        assert(msgArray.length() == jsonArray.Size());
     }
     else
     {
@@ -134,7 +134,7 @@ void fillStringArray(const rapidjson::Value::ConstArray& jsonArray,
     auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<std::string>>();
     if(msgArray.isFixedSize())
     {
-        assert(msgArray.length() >= jsonArray.Size());
+        assert(msgArray.length() == jsonArray.Size());
     }
     else
     {
@@ -159,7 +159,7 @@ void fillTimeArray(const rapidjson::Value::ConstArray& jsonArray,
     auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<ros::Time>>();
     if(msgArray.isFixedSize())
     {
-        assert(msgArray.length() >= jsonArray.Size());
+        assert(msgArray.length() == jsonArray.Size());
     }
     else
     {
@@ -188,7 +188,7 @@ void fillDurationArray(const rapidjson::Value::ConstArray& jsonArray,
     auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<ros::Duration>>();
     if(msgArray.isFixedSize())
     {
-        assert(msgArray.length() >= jsonArray.Size());
+        assert(msgArray.length() == jsonArray.Size());
     }
     else
     {
@@ -217,7 +217,7 @@ void fillMessageArray(const rapidjson::Value::ConstArray& jsonArray,
     auto& msgArray = baseArray.as<ros_babel_fish::CompoundArrayMessage>();
     if(msgArray.isFixedSize())
     {
-        assert(msgArray.length() >= jsonArray.Size());
+        assert(msgArray.length() == jsonArray.Size());
     }
     else
     {
@@ -249,8 +249,7 @@ void fillMessageFromJson(const rapidjson::Value& json,
         {
         case ros_babel_fish::MessageTypes::Array: {
             const auto jsonArray = m.value.GetArray();
-            auto& base =
-                message[m.name.GetString()].as<ros_babel_fish::ArrayMessageBase>();
+            auto& base = val.as<ros_babel_fish::ArrayMessageBase>();
 
             const auto type = base.elementType();
             switch(type)

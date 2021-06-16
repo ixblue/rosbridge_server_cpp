@@ -13,13 +13,16 @@
 #include <std_msgs/String.h>
 
 #include "rapidjson/document.h"
-#include "rapidjson/prettywriter.h"
-#include "rapidjson/writer.h"
 
 #include "rapidjson_to_ros.h"
 #include "ros_to_rapidjson.h"
 
+#include "nlohmann_to_ros.h"
+#include "ros_to_nlohmann.h"
+
 static const ros::Time g_rosTime{34325437, 432427};
+
+// Helper functions to fill ROS msgs
 
 void fillMessage(geometry_msgs::Pose& m)
 {
@@ -38,6 +41,42 @@ void fillMessage(geometry_msgs::PoseStamped& m)
     m.header.stamp.nsec = 432423;
     m.header.frame_id = "robot";
     fillMessage(m.pose);
+}
+
+void fillMessage(geometry_msgs::PoseWithCovariance& m)
+{
+    fillMessage(m.pose);
+    std::iota(m.covariance.begin(), m.covariance.end(), 0);
+}
+
+void fillMessage(geometry_msgs::Vector3& m)
+{
+    m.x = 1.0;
+    m.y = 2.0;
+    m.z = 3.0;
+}
+
+void fillMessage(geometry_msgs::Twist& m)
+{
+    fillMessage(m.linear);
+    fillMessage(m.angular);
+}
+
+void fillMessage(geometry_msgs::TwistWithCovariance& m)
+{
+    fillMessage(m.twist);
+    std::iota(m.covariance.begin(), m.covariance.end(), 0);
+}
+
+void fillMessage(nav_msgs::Odometry& m)
+{
+    m.header.stamp.sec = 34325435;
+    m.header.stamp.nsec = 432423;
+    m.header.frame_id = "robot";
+    m.header.seq = 456;
+    m.child_frame_id = "child";
+    fillMessage(m.pose);
+    fillMessage(m.twist);
 }
 
 void fillMessage(sensor_msgs::NavSatFix& m)
@@ -124,33 +163,127 @@ void fillMessage(sensor_msgs::Image& m)
     }
 }
 
-TEST(JsonToROSTester, CanFillStringMsgFromJson)
+template<typename T>
+ros_babel_fish::BabelFishMessage serializeMessage(ros_babel_fish::BabelFish& fish)
+{
+    const std::string& datatype = ros::message_traits::DataType<T>::value();
+    const std::string& definition = ros::message_traits::Definition<T>::value();
+    const std::string& md5 = ros::message_traits::MD5Sum<T>::value();
+
+    T msg;
+    fillMessage(msg);
+
+    // Create serialized version of the message
+    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
+
+    ros_babel_fish::BabelFishMessage bfMsg;
+    bfMsg.morph(md5, datatype, definition);
+
+    fish.descriptionProvider()->getMessageDescription(bfMsg);
+    ros::serialization::deserializeMessage(serialized_msg, bfMsg);
+    return bfMsg;
+}
+
+// Interface to test several implementation
+template<typename T> class JSONParser
+{
+public:
+    virtual ros_babel_fish::BabelFishMessage::Ptr
+    createMsgFromJson(ros_babel_fish::BabelFish& fish, const std::string& type,
+                      const ros::Time& time, const std::string& jsonStr) = 0;
+
+    virtual std::string toJsonString(ros_babel_fish::BabelFish& fish,
+                                     const ros_babel_fish::BabelFishMessage& msg) = 0;
+
+    virtual std::string parseAndStringify(const std::string& jsonStr) = 0;
+};
+
+class RapidJSONParser : public JSONParser<rapidjson::Value>
+{
+public:
+    ros_babel_fish::BabelFishMessage::Ptr
+    createMsgFromJson(ros_babel_fish::BabelFish& fish, const std::string& type,
+                      const ros::Time& time, const std::string& jsonStr) override
+    {
+        rapidjson::Document doc;
+        doc.Parse(jsonStr);
+        return ros_rapidjson_converter::createMsg(fish, type, time, doc);
+    }
+
+    std::string toJsonString(ros_babel_fish::BabelFish& fish,
+                             const ros_babel_fish::BabelFishMessage& msg) override
+    {
+        rapidjson::Document doc;
+        ros_rapidjson_converter::toJson(fish, msg, doc, doc.GetAllocator());
+        return ros_rapidjson_converter::jsonToString(doc);
+    }
+
+    std::string parseAndStringify(const std::string& jsonStr) override
+    {
+        rapidjson::Document doc;
+        doc.Parse(jsonStr);
+        return ros_rapidjson_converter::jsonToString(doc);
+    }
+};
+
+class NlohmannJSONParser : public JSONParser<nlohmann::json>
+{
+public:
+    ros_babel_fish::BabelFishMessage::Ptr
+    createMsgFromJson(ros_babel_fish::BabelFish& fish, const std::string& type,
+                      const ros::Time& time, const std::string& jsonStr) override
+    {
+        auto json = nlohmann::json::parse(jsonStr);
+        return ros_nlohmann_converter::createMsg(fish, type, time, json);
+    }
+
+    std::string toJsonString(ros_babel_fish::BabelFish& fish,
+                             const ros_babel_fish::BabelFishMessage& msg) override
+    {
+        return ros_nlohmann_converter::toJson(fish, msg).dump();
+    }
+
+    std::string parseAndStringify(const std::string& jsonStr) override
+    {
+        return nlohmann::json::parse(jsonStr).dump();
+    }
+};
+
+template<typename T> class JSONTester : public testing::Test
+{
+public:
+    T parser;
+};
+
+// Lister les types a tester dans les arguments de template
+using ParserTypes = testing::Types<RapidJSONParser, NlohmannJSONParser>;
+
+// Defini les types sur lesquels faire les tests
+TYPED_TEST_CASE(JSONTester, ParserTypes);
+
+TYPED_TEST(JSONTester, CanFillStringMsgFromJson)
 {
     const auto jsonData = R"({"data": "hello"})";
-    rapidjson::Document doc;
-    doc.Parse(jsonData);
-    ASSERT_FALSE(doc.HasParseError());
+
     ros_babel_fish::BabelFish fish;
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
-    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(fish, "std_msgs/String",
-                                                                g_rosTime, doc));
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(fish, "std_msgs/String",
+                                                            g_rosTime, jsonData));
     ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
     EXPECT_EQ(compound["data"].value<std::string>(), "hello");
 }
 
-TEST(JsonToROSTester, CanFillPoseMsgFromJson)
+TYPED_TEST(JSONTester, CanFillPoseMsgFromJson)
 {
     const auto jsonData =
         R"({"orientation":{"w":4.5,"x":1.2,"y":2.3,"z":3.4},"position":{"x":5.6,"y":6.7,"z":7.8}})";
-    rapidjson::Document doc;
-    doc.Parse(jsonData);
-    ASSERT_FALSE(doc.HasParseError());
+
     ros_babel_fish::BabelFish fish;
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
-    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(
-                        fish, "geometry_msgs/Pose", g_rosTime, doc));
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(fish, "geometry_msgs/Pose",
+                                                            g_rosTime, jsonData));
     ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
@@ -163,17 +296,15 @@ TEST(JsonToROSTester, CanFillPoseMsgFromJson)
     EXPECT_EQ(compound["orientation"]["w"].value<double>(), 4.5);
 }
 
-TEST(JsonToROSTester, CanFillPoseStampedMsgFromJson)
+TYPED_TEST(JSONTester, CanFillPoseStampedMsgFromJson)
 {
     const auto jsonData =
         R"({"header":{"frame_id":"robot","seq":2,"stamp":{"nsecs":432423,"secs":34325435}},"pose":{"orientation":{"w":4.5,"x":1.2,"y":2.3,"z":3.4},"position":{"x":5.6,"y":6.7,"z":7.8}}})";
-    rapidjson::Document doc;
-    doc.Parse(jsonData);
-    ASSERT_FALSE(doc.HasParseError());
+
     ros_babel_fish::BabelFish fish;
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
-    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(
-                        fish, "geometry_msgs/PoseStamped", g_rosTime, doc));
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
+                        fish, "geometry_msgs/PoseStamped", g_rosTime, jsonData));
     ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
@@ -190,7 +321,7 @@ TEST(JsonToROSTester, CanFillPoseStampedMsgFromJson)
     EXPECT_EQ(compound["pose"]["orientation"]["w"].value<double>(), 4.5);
 }
 
-TEST(JsonToROSTester, CanFillOdometryMsgFromJson)
+TYPED_TEST(JSONTester, CanFillOdometryMsgFromJson)
 {
     const auto jsonData = R"({
         "header":{
@@ -212,13 +343,11 @@ TEST(JsonToROSTester, CanFillOdometryMsgFromJson)
             }
         }
     })";
-    rapidjson::Document doc;
-    doc.Parse(jsonData);
-    ASSERT_FALSE(doc.HasParseError());
+
     ros_babel_fish::BabelFish fish;
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
-    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(fish, "nav_msgs/Odometry",
-                                                                g_rosTime, doc));
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(fish, "nav_msgs/Odometry",
+                                                            g_rosTime, jsonData));
     ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
@@ -263,17 +392,15 @@ TEST(JsonToROSTester, CanFillOdometryMsgFromJson)
     }
 }
 
-TEST(JsonToROSTester, CanFillPointMsgFromPartialJson)
+TYPED_TEST(JSONTester, CanFillPointMsgFromPartialJson)
 {
     // position.z is missing
     const auto jsonData = R"({"x":5.6,"y":6.7})";
-    rapidjson::Document doc;
-    doc.Parse(jsonData);
-    ASSERT_FALSE(doc.HasParseError());
+
     ros_babel_fish::BabelFish fish;
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
-    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(
-                        fish, "geometry_msgs/Point", g_rosTime, doc));
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(fish, "geometry_msgs/Point",
+                                                            g_rosTime, jsonData));
     ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
@@ -282,17 +409,15 @@ TEST(JsonToROSTester, CanFillPointMsgFromPartialJson)
     EXPECT_EQ(compound["z"].value<double>(), 0.0);
 }
 
-TEST(JsonToROSTester, CanFillPointStampedMsgFromJsonWithHeaderMissing)
+TYPED_TEST(JSONTester, CanFillPointStampedMsgFromJsonWithHeaderMissing)
 {
     // position.z is missing
     const auto jsonData = R"({"point":{"x":5.6,"y":6.7,"z":7.8}})";
-    rapidjson::Document doc;
-    doc.Parse(jsonData);
-    ASSERT_FALSE(doc.HasParseError());
+
     ros_babel_fish::BabelFish fish;
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
-    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(
-                        fish, "geometry_msgs/PointStamped", g_rosTime, doc));
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
+                        fish, "geometry_msgs/PointStamped", g_rosTime, jsonData));
     ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
@@ -305,18 +430,16 @@ TEST(JsonToROSTester, CanFillPointStampedMsgFromJsonWithHeaderMissing)
     EXPECT_EQ(compound["point"]["z"].value<double>(), 7.8);
 }
 
-TEST(JsonToROSTester, CanFillPointStampedMsgFromJsonWithStampMissing)
+TYPED_TEST(JSONTester, CanFillPointStampedMsgFromJsonWithStampMissing)
 {
     // position.z is missing
     const auto jsonData =
         R"({"header":{"frame_id":"robot","seq":2},"point":{"x":5.6,"y":6.7,"z":7.8}})";
-    rapidjson::Document doc;
-    doc.Parse(jsonData);
-    ASSERT_FALSE(doc.HasParseError());
+
     ros_babel_fish::BabelFish fish;
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
-    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(
-                        fish, "geometry_msgs/PointStamped", g_rosTime, doc));
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
+                        fish, "geometry_msgs/PointStamped", g_rosTime, jsonData));
     ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
@@ -329,18 +452,16 @@ TEST(JsonToROSTester, CanFillPointStampedMsgFromJsonWithStampMissing)
     EXPECT_EQ(compound["point"]["z"].value<double>(), 7.8);
 }
 
-TEST(JsonToROSTester, CanFillPointStampedMsggFromJsonWithStampMissing)
+TYPED_TEST(JSONTester, CanFillPointStampedMsggFromJsonWithStampMissing)
 {
     // position.z is missing
     const auto jsonData =
         R"({"header":{"frame_id":"robot","seq":2},"point":{"x":5.6,"y":6.7,"z":7.8}})";
-    rapidjson::Document doc;
-    doc.Parse(jsonData);
-    ASSERT_FALSE(doc.HasParseError());
+
     ros_babel_fish::BabelFish fish;
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
-    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(
-                        fish, "geometry_msgs/PointStamped", g_rosTime, doc));
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
+                        fish, "geometry_msgs/PointStamped", g_rosTime, jsonData));
     ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
@@ -353,18 +474,15 @@ TEST(JsonToROSTester, CanFillPointStampedMsggFromJsonWithStampMissing)
     EXPECT_EQ(compound["point"]["z"].value<double>(), 7.8);
 }
 
-TEST(JsonToROSTester, CanFillNavSatFixFromJSON)
+TYPED_TEST(JSONTester, CanFillNavSatFixFromJSON)
 {
     const auto jsonData =
         R"({"header":{"seq":123,"stamp":{"secs":1000,"nsecs":10000},"frame_id":"frame_id"},"status":{"status":1,"service":4},"latitude":123.456,"longitude":654.321,"altitude":100.101,"position_covariance":[1.1,0,0,0,2.2,0,0,0,3.3],"position_covariance_type":2})";
 
-    rapidjson::Document doc;
-    doc.Parse(jsonData);
-    ASSERT_FALSE(doc.HasParseError());
     ros_babel_fish::BabelFish fish;
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
-    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(
-                        fish, "sensor_msgs/NavSatFix", g_rosTime, doc));
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(fish, "sensor_msgs/NavSatFix",
+                                                            g_rosTime, jsonData));
 
     sensor_msgs::NavSatFix expectedMsg;
     fillMessage(expectedMsg);
@@ -403,7 +521,7 @@ TEST(JsonToROSTester, CanFillNavSatFixFromJSON)
     EXPECT_EQ(array[8], expectedMsg.position_covariance[8]);
 }
 
-TEST(JsonToROSTester, CanFillDiagnosticArrayFromJSON)
+TYPED_TEST(JSONTester, CanFillDiagnosticArrayFromJSON)
 {
     const auto jsonData = R"({
         "header":{"seq":0,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},
@@ -449,13 +567,10 @@ TEST(JsonToROSTester, CanFillDiagnosticArrayFromJSON)
         ]
     })";
 
-    rapidjson::Document doc;
-    doc.Parse(jsonData);
-    ASSERT_FALSE(doc.HasParseError());
     ros_babel_fish::BabelFish fish;
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
-    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(
-                        fish, "diagnostic_msgs/DiagnosticArray", g_rosTime, doc));
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
+                        fish, "diagnostic_msgs/DiagnosticArray", g_rosTime, jsonData));
 
     diagnostic_msgs::DiagnosticArray expectedMsg;
     fillMessage(expectedMsg);
@@ -516,7 +631,7 @@ TEST(JsonToROSTester, CanFillDiagnosticArrayFromJSON)
     }
 }
 
-TEST(JsonToROSTester, CanFillImageFromJSON)
+TYPED_TEST(JSONTester, CanFillImageFromJSON)
 {
     const auto jsonData = R"({
         "header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},
@@ -528,13 +643,10 @@ TEST(JsonToROSTester, CanFillImageFromJSON)
         "data":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]
     })";
 
-    rapidjson::Document doc;
-    doc.Parse(jsonData);
-    ASSERT_FALSE(doc.HasParseError());
     ros_babel_fish::BabelFish fish;
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
-    ASSERT_NO_THROW(rosMsg = ros_rapidjson_converter::createMsg(fish, "sensor_msgs/Image",
-                                                                g_rosTime, doc));
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(fish, "sensor_msgs/Image",
+                                                            g_rosTime, jsonData));
 
     sensor_msgs::Image expectedMsg;
     fillMessage(expectedMsg);
@@ -572,179 +684,194 @@ TEST(JsonToROSTester, CanFillImageFromJSON)
     }
 }
 
+TYPED_TEST(JSONTester, CanFillOdometryFromJson)
+{
+    const auto jsonData = R"({
+        "child_frame_id": "child",
+        "header": {
+            "frame_id": "robot",
+            "seq": 456,
+            "stamp":{"secs":34325435,"nsecs":432423}
+        },
+        "pose": {
+            "covariance": [0.0,1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0,17.0,18.0,19.0,20.0,21.0,22.0,23.0,24.0,25.0,26.0,27.0,28.0,29.0,30.0,31.0,32.0,33.0,34.0,35.0],
+            "pose": {
+                "orientation": {
+                    "w": 4.0,
+                    "x": 1.0,
+                    "y": 2.0,
+                    "z": 3.0
+                },
+                "position": {
+                    "x": 1.0,
+                    "y": 2.0,
+                    "z": 3.0
+                }
+            }
+        },
+        "twist": {
+            "covariance": [0.0,1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0,17.0,18.0,19.0,20.0,21.0,22.0,23.0,24.0,25.0,26.0,27.0,28.0,29.0,30.0,31.0,32.0,33.0,34.0,35.0],
+            "twist": {
+                "angular": {
+                    "x": 1.0,
+                    "y": 2.0,
+                    "z": 3.0
+                },
+                "linear": {
+                    "x": 1.0,
+                    "y": 2.0,
+                    "z": 3.0
+                }
+            }
+        }
+    })";
+
+    ros_babel_fish::BabelFish fish;
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(fish, "nav_msgs/Odometry",
+                                                            g_rosTime, jsonData));
+
+    nav_msgs::Odometry expectedMsg;
+    fillMessage(expectedMsg);
+    ros::SerializedMessage serializedExpectedMsg =
+        ros::serialization::serializeMessage(expectedMsg);
+
+    // Compare ROS encoded message
+    ASSERT_EQ(rosMsg->size(), serializedExpectedMsg.num_bytes - 4);
+    EXPECT_EQ(std::memcmp(rosMsg->buffer(), serializedExpectedMsg.message_start,
+                          rosMsg->size()),
+              0);
+
+    // Compare values
+    ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+    EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(),
+              expectedMsg.header.frame_id);
+    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), expectedMsg.header.seq);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec,
+              expectedMsg.header.stamp.sec);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec,
+              expectedMsg.header.stamp.nsec);
+    EXPECT_EQ(compound["child_frame_id"].value<std::string>(),
+              expectedMsg.child_frame_id);
+    EXPECT_EQ(compound["pose"]["pose"]["position"]["x"].value<double>(),
+              expectedMsg.pose.pose.position.x);
+    EXPECT_EQ(compound["pose"]["pose"]["position"]["y"].value<double>(),
+              expectedMsg.pose.pose.position.y);
+    EXPECT_EQ(compound["pose"]["pose"]["position"]["z"].value<double>(),
+              expectedMsg.pose.pose.position.z);
+    EXPECT_EQ(compound["pose"]["pose"]["orientation"]["x"].value<double>(),
+              expectedMsg.pose.pose.orientation.x);
+    EXPECT_EQ(compound["pose"]["pose"]["orientation"]["y"].value<double>(),
+              expectedMsg.pose.pose.orientation.y);
+    EXPECT_EQ(compound["pose"]["pose"]["orientation"]["z"].value<double>(),
+              expectedMsg.pose.pose.orientation.z);
+    EXPECT_EQ(compound["pose"]["pose"]["orientation"]["w"].value<double>(),
+              expectedMsg.pose.pose.orientation.w);
+    {
+        auto& base =
+            compound["pose"]["covariance"].as<ros_babel_fish::ArrayMessageBase>();
+        auto& array = base.as<ros_babel_fish::ArrayMessage<double>>();
+        ASSERT_EQ(array.length(), expectedMsg.pose.covariance.size());
+        for(size_t i = 0; i < array.length(); ++i)
+        {
+            EXPECT_EQ(array[i], expectedMsg.pose.covariance[i]);
+        }
+    }
+    EXPECT_EQ(compound["twist"]["twist"]["linear"]["x"].value<double>(),
+              expectedMsg.twist.twist.linear.x);
+    EXPECT_EQ(compound["twist"]["twist"]["linear"]["y"].value<double>(),
+              expectedMsg.twist.twist.linear.y);
+    EXPECT_EQ(compound["twist"]["twist"]["linear"]["z"].value<double>(),
+              expectedMsg.twist.twist.linear.z);
+    EXPECT_EQ(compound["twist"]["twist"]["angular"]["x"].value<double>(),
+              expectedMsg.twist.twist.angular.x);
+    EXPECT_EQ(compound["twist"]["twist"]["angular"]["y"].value<double>(),
+              expectedMsg.twist.twist.angular.y);
+    EXPECT_EQ(compound["twist"]["twist"]["angular"]["z"].value<double>(),
+              expectedMsg.twist.twist.angular.z);
+    {
+        auto& base =
+            compound["twist"]["covariance"].as<ros_babel_fish::ArrayMessageBase>();
+        auto& array = base.as<ros_babel_fish::ArrayMessage<double>>();
+        ASSERT_EQ(array.length(), expectedMsg.twist.covariance.size());
+        for(size_t i = 0; i < array.length(); ++i)
+        {
+            EXPECT_EQ(array[i], expectedMsg.twist.covariance[i]);
+        }
+    }
+}
+
 /////////////////
 /// ROS to JSON
 /////////////////
 
-TEST(ROSToJsonTester, CanConvertSerializedPoseStampedToJson)
+TYPED_TEST(JSONTester, CanConvertSerializedPoseStampedToJson)
 {
-    const std::string& datatype =
-        ros::message_traits::DataType<geometry_msgs::PoseStamped>::value();
-    const std::string& definition =
-        ros::message_traits::Definition<geometry_msgs::PoseStamped>::value();
-    const std::string& md5 =
-        ros::message_traits::MD5Sum<geometry_msgs::PoseStamped>::value();
-
-    geometry_msgs::PoseStamped msg;
-    fillMessage(msg);
-
-    // Create serialized version of the message
-    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
-
-    ros_babel_fish::BabelFishMessage bf_msg;
-    bf_msg.morph(md5, datatype, definition);
     ros_babel_fish::BabelFish fish;
+    auto bfMsg = serializeMessage<geometry_msgs::PoseStamped>(fish);
 
-    fish.descriptionProvider()->getMessageDescription(bf_msg);
-    ros::serialization::deserializeMessage(serialized_msg, bf_msg);
-
-    rapidjson::Document doc;
-    ros_rapidjson_converter::toJson(fish, bf_msg, doc, doc.GetAllocator());
-
-    const std::string json = ros_rapidjson_converter::jsonToString(doc);
-
-    EXPECT_EQ(
-        json,
-        R"({"header":{"seq":0,"stamp":{"secs":34325435,"nsecs":432423},"frame_id":"robot"},"pose":{"position":{"x":1.0,"y":2.0,"z":3.0},"orientation":{"x":1.0,"y":2.0,"z":3.0,"w":4.0}}})");
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
+    const auto expectedJson =
+        R"({"header":{"seq":0,"stamp":{"secs":34325435,"nsecs":432423},"frame_id":"robot"},"pose":{"position":{"x":1.0,"y":2.0,"z":3.0},"orientation":{"x":1.0,"y":2.0,"z":3.0,"w":4.0}}})";
+    // Json serialization order might differ accros library, so parse and stringify the
+    // expected string to get comparable result
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
 }
 
-TEST(ROSToJsonTester, CanConvertSerializedPoseStampedToJsonTwice)
+TYPED_TEST(JSONTester, CanConvertSerializedPoseStampedToJsonTwice)
 {
-    const std::string& datatype =
-        ros::message_traits::DataType<geometry_msgs::PoseStamped>::value();
-    const std::string& definition =
-        ros::message_traits::Definition<geometry_msgs::PoseStamped>::value();
-    const std::string& md5 =
-        ros::message_traits::MD5Sum<geometry_msgs::PoseStamped>::value();
-
-    geometry_msgs::PoseStamped msg;
-    fillMessage(msg);
-
-    // Create serialized version of the message
-    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
-
-    ros_babel_fish::BabelFishMessage bf_msg;
-    bf_msg.morph(md5, datatype, definition);
     ros_babel_fish::BabelFish fish;
+    auto bfMsg = serializeMessage<geometry_msgs::PoseStamped>(fish);
 
-    fish.descriptionProvider()->getMessageDescription(bf_msg);
-    ros::serialization::deserializeMessage(serialized_msg, bf_msg);
-
+    const auto expectedJson =
+        R"({"header":{"seq":0,"stamp":{"secs":34325435,"nsecs":432423},"frame_id":"robot"},"pose":{"position":{"x":1.0,"y":2.0,"z":3.0},"orientation":{"x":1.0,"y":2.0,"z":3.0,"w":4.0}}})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
     {
-        rapidjson::Document doc;
-        ros_rapidjson_converter::toJson(fish, bf_msg, doc, doc.GetAllocator());
-
-        const std::string json = ros_rapidjson_converter::jsonToString(doc);
-
-        EXPECT_EQ(
-            json,
-            R"({"header":{"seq":0,"stamp":{"secs":34325435,"nsecs":432423},"frame_id":"robot"},"pose":{"position":{"x":1.0,"y":2.0,"z":3.0},"orientation":{"x":1.0,"y":2.0,"z":3.0,"w":4.0}}})");
+        const std::string json = this->parser.toJsonString(fish, bfMsg);
+        EXPECT_EQ(json, expectedOutput);
     }
     {
-        rapidjson::Document doc;
-        ros_rapidjson_converter::toJson(fish, bf_msg, doc, doc.GetAllocator());
-
-        const std::string json = ros_rapidjson_converter::jsonToString(doc);
-
-        EXPECT_EQ(
-            json,
-            R"({"header":{"seq":0,"stamp":{"secs":34325435,"nsecs":432423},"frame_id":"robot"},"pose":{"position":{"x":1.0,"y":2.0,"z":3.0},"orientation":{"x":1.0,"y":2.0,"z":3.0,"w":4.0}}})");
+        const std::string json = this->parser.toJsonString(fish, bfMsg);
+        EXPECT_EQ(json, expectedOutput);
     }
 }
 
-TEST(ROSToJsonTester, CanConvertNavSatFixToJson)
+TYPED_TEST(JSONTester, CanConvertNavSatFixToJson)
 {
-    const std::string& datatype =
-        ros::message_traits::DataType<sensor_msgs::NavSatFix>::value();
-    const std::string& definition =
-        ros::message_traits::Definition<sensor_msgs::NavSatFix>::value();
-    const std::string& md5 = ros::message_traits::MD5Sum<sensor_msgs::NavSatFix>::value();
-
-    sensor_msgs::NavSatFix msg;
-    fillMessage(msg);
-
-    // Create serialized version of the message
-    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
-
-    ros_babel_fish::BabelFishMessage bf_msg;
-    bf_msg.morph(md5, datatype, definition);
     ros_babel_fish::BabelFish fish;
-
-    fish.descriptionProvider()->getMessageDescription(bf_msg);
-    ros::serialization::deserializeMessage(serialized_msg, bf_msg);
-
-    rapidjson::Document doc;
-    ros_rapidjson_converter::toJson(fish, bf_msg, doc, doc.GetAllocator());
-
-    const std::string json = ros_rapidjson_converter::jsonToString(doc);
+    auto bfMsg = serializeMessage<sensor_msgs::NavSatFix>(fish);
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
 
     const auto expectedJson =
         R"({"header":{"seq":123,"stamp":{"secs":1000,"nsecs":10000},"frame_id":"frame_id"},"status":{"status":1,"service":4},"latitude":123.456,"longitude":654.321,"altitude":100.101,"position_covariance":[1.1,0.0,0.0,0.0,2.2,0.0,0.0,0.0,3.3],"position_covariance_type":2})";
-
-    EXPECT_EQ(json, expectedJson);
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
 }
 
-TEST(ROSToJsonTester, CanConvertDiagnosticArrayToJson)
+TYPED_TEST(JSONTester, CanConvertDiagnosticArrayToJson)
 {
-    const std::string& datatype =
-        ros::message_traits::DataType<diagnostic_msgs::DiagnosticArray>::value();
-    const std::string& definition =
-        ros::message_traits::Definition<diagnostic_msgs::DiagnosticArray>::value();
-    const std::string& md5 =
-        ros::message_traits::MD5Sum<diagnostic_msgs::DiagnosticArray>::value();
-
-    diagnostic_msgs::DiagnosticArray msg;
-    fillMessage(msg);
-
-    // Create serialized version of the message
-    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
-
-    ros_babel_fish::BabelFishMessage bf_msg;
-    bf_msg.morph(md5, datatype, definition);
     ros_babel_fish::BabelFish fish;
-
-    fish.descriptionProvider()->getMessageDescription(bf_msg);
-    ros::serialization::deserializeMessage(serialized_msg, bf_msg);
-
-    rapidjson::Document doc;
-    ros_rapidjson_converter::toJson(fish, bf_msg, doc, doc.GetAllocator());
-
-    const std::string json = ros_rapidjson_converter::jsonToString(doc);
+    auto bfMsg = serializeMessage<diagnostic_msgs::DiagnosticArray>(fish);
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
 
     const auto expectedJson =
         R"({"header":{"seq":0,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},"status":[{"level":2,"name":"status1","message":"message1","hardware_id":"","values":[{"key":"key1","value":"value1"},{"key":"key2","value":"value2"},{"key":"key3","value":"value3"}]},{"level":1,"name":"status2","message":"message2","hardware_id":"","values":[{"key":"key1","value":"value11"},{"key":"key2","value":"value22"},{"key":"key3","value":"value33"}]}]})";
-
-    EXPECT_EQ(json, expectedJson);
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
 }
 
-TEST(ROSToJsonTester, CanConvertImageToJson)
+TYPED_TEST(JSONTester, CanConvertImageToJson)
 {
-    const std::string& datatype =
-        ros::message_traits::DataType<sensor_msgs::Image>::value();
-    const std::string& definition =
-        ros::message_traits::Definition<sensor_msgs::Image>::value();
-    const std::string& md5 = ros::message_traits::MD5Sum<sensor_msgs::Image>::value();
-
-    sensor_msgs::Image msg;
-    fillMessage(msg);
-
-    // Create serialized version of the message
-    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
-
-    ros_babel_fish::BabelFishMessage bf_msg;
-    bf_msg.morph(md5, datatype, definition);
     ros_babel_fish::BabelFish fish;
-
-    fish.descriptionProvider()->getMessageDescription(bf_msg);
-    ros::serialization::deserializeMessage(serialized_msg, bf_msg);
-
-    rapidjson::Document doc;
-    ros_rapidjson_converter::toJson(fish, bf_msg, doc, doc.GetAllocator());
-
-    const std::string json = ros_rapidjson_converter::jsonToString(doc);
+    auto bfMsg = serializeMessage<sensor_msgs::Image>(fish);
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
     const auto expectedJson =
         R"({"header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},"height":3,"width":2,"encoding":"bgr8","is_bigendian":0,"step":6,"data":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]})";
-    EXPECT_EQ(json, expectedJson);
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
 }
 
 int main(int argc, char** argv)

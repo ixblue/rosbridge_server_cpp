@@ -18,7 +18,7 @@ void fillIntArray(const rapidjson::Value::ConstArray& jsonArray,
     auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<T>>();
     if(msgArray.isFixedSize())
     {
-        assert(msgArray.length() >= jsonArray.Size());
+        assert(msgArray.length() == jsonArray.Size());
     }
     else
     {
@@ -44,7 +44,7 @@ void fillUintArray(const rapidjson::Value::ConstArray& jsonArray,
     auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<T>>();
     if(msgArray.isFixedSize())
     {
-        assert(msgArray.length() >= jsonArray.Size());
+        assert(msgArray.length() == jsonArray.Size());
     }
     else
     {

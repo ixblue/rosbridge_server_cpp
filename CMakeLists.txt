@@ -140,6 +140,8 @@ add_library(${PROJECT_NAME}
     src/ServiceCallerWithTimeout.cpp
     src/ros_to_rapidjson.cpp
     src/rapidjson_to_ros.cpp
+    src/ros_to_nlohmann.cpp
+    src/nlohmann_to_ros.cpp
 )
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
