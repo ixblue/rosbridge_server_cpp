@@ -65,3 +65,8 @@ void WSClient::sendMsg(const QString& msg)
 {
     m_ws->sendTextMessage(msg);
 }
+
+void WSClient::sendBinaryMsg(const QByteArray &binaryMsg)
+{
+    m_ws->sendBinaryMessage(binaryMsg);
+}

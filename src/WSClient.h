@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -23,6 +25,7 @@ public:
 public slots:
     void onWSDisconnected();
     void sendMsg(const QString& msg);
+    void sendBinaryMsg(const QByteArray& binaryMsg);
 
 signals:
     void onWSMessage(const QString& msg);

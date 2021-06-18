@@ -35,6 +35,7 @@ struct SubscriberClient
     int throttleRate_ms = 0; // in ms
     int fragmentSize = -1;
     std::string compression;
+    rosbridge_protocol::Encoding encoding = rosbridge_protocol::Encoding::JSON;
     ros::Time lastTimeMsgSent;
     // TODO circular buffer
 };
@@ -94,12 +95,13 @@ private:
                     const std::string& msg, const std::string& id = std::string{});
     void sendMsg(WSClient* client, const std::string& msg);
     void sendJson(WSClient* client, const rapidjson::Document& doc);
+    void sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg);
 
     ros::NodeHandle m_nh;
     std::map<std::string, ROSBridgePublisher> m_pubs;
     std::map<std::string, ROSBridgeSubscriber> m_subs;
     std::shared_ptr<ros_babel_fish::BabelFish> m_fish;
-
+    std::set<rosbridge_protocol::Encoding> m_encodings;
     QWebSocketServer m_wsServer;
     std::vector<std::shared_ptr<WSClient>> m_clients;
 

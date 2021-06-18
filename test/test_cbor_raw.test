@@ -1,0 +1,10 @@
+<launch>
+  <env name="ROSCONSOLE_FORMAT" value="[${severity}][${time}][${function}:${line}][${thread}]: ${message}" />
+  <env name="ROSCONSOLE_CONFIG_FILE" value="$(find p_rosbridge_server_cpp)/launch/rosconsole.config" />
+  <env name="PROTOCOL" value="ws" />
+  <node name="rosbridge_websocket" pkg="p_rosbridge_server_cpp" type="p_rosbridge_server_cpp_node">
+    <param name="port" value="0" />
+  </node>
+  <test test-name="test_cbor_raw" pkg="p_rosbridge_server_cpp" type="test_cbor_raw.py" />
+</launch>
+

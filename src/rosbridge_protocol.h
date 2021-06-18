@@ -16,6 +16,14 @@ enum class StatusLevel
     Error
 };
 
+enum class Encoding
+{
+    JSON,
+    CBOR,
+    CBOR_RAW,
+    PNG, // Not-implemented
+};
+
 const std::map<StatusLevel, std::string> statusLevelStringMap{
     {StatusLevel::None, "none"},
     {StatusLevel::Info, "info"},

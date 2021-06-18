@@ -4,12 +4,15 @@
 #include <QMetaObject>
 #include <QWebSocket>
 
+#include "nlohmann/json.hpp"
+
 #include "rapidjson/writer.h"
 
 #include "ROSNode.h"
 #include "ServiceCallerWithTimeout.h"
 #include "WSClient.h"
 #include "rapidjson_to_ros.h"
+#include "ros_to_nlohmann.h"
 #include "ros_to_rapidjson.h"
 
 namespace rbp = rosbridge_protocol;
@@ -37,14 +40,15 @@ ROSNode::ROSNode(QObject* parent)
     m_nh.getParam("port", port);
     m_nh.getParam("service_timeout", m_serviceTimeout);
 
-    ROS_INFO_STREAM("Start WS on port: " << port);
-
     if(!m_wsServer.listen(QHostAddress::Any, port))
     {
         ROS_FATAL_STREAM("Failed to start WS server on port "
                          << port << ": " << m_wsServer.errorString().toStdString());
         exit(1);
     }
+
+    ROS_INFO_STREAM("Start WS on port: " << m_wsServer.serverPort());
+    m_nh.setParam("actual_port", m_wsServer.serverPort());
 
     connect(&m_wsServer, &QWebSocketServer::newConnection, this,
             &ROSNode::onNewWSConnection);
@@ -160,6 +164,20 @@ void ROSNode::subscribe(WSClient* client, const rbp::SubscribeArgs& args)
         newSubClient->throttleRate_ms = args.throttleRate;
         newSubClient->fragmentSize = args.fragmentSize;
         newSubClient->compression = args.compression;
+        // Default = JSON, PNG not implemented
+        if(args.compression == "cbor")
+        {
+            newSubClient->encoding = rbp::Encoding::CBOR;
+        }
+        else if(args.compression == "cbor-raw")
+        {
+            newSubClient->encoding = rbp::Encoding::CBOR_RAW;
+        }
+        else
+        {
+            newSubClient->encoding = rbp::Encoding::JSON;
+        }
+        m_encodings.insert(newSubClient->encoding);
         return newSubClient;
     };
 
@@ -260,13 +278,15 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args,
                                                           m_serviceTimeout, this);
 
         connect(serviceClient, &ServiceCallerWithTimeout::success, this,
-                [this, id = args.id, serviceName = args.serviceName, client]() {
+                [this, id = args.id, serviceName = args.serviceName,
+                 compression = args.compression, client]() {
                     auto* serviceClient =
                         qobject_cast<ServiceCallerWithTimeout*>(sender());
                     if(client != nullptr)
                     {
                         auto res = serviceClient->getResponse();
 
+                        /*
                         rapidjson::Document jsonDoc;
                         jsonDoc.SetObject();
                         jsonDoc.AddMember("op", "service_response",
@@ -281,8 +301,41 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args,
                             *res->translated_message, jsonMsg, jsonDoc.GetAllocator());
                         jsonDoc.AddMember("values", jsonMsg, jsonDoc.GetAllocator());
                         jsonDoc.AddMember("result", true, jsonDoc.GetAllocator());
-
                         sendJson(client, jsonDoc);
+                        */
+
+                        nlohmann::json json;
+                        json["op"] = "service_response";
+                        json["service"] = serviceName;
+                        if(!id.empty())
+                        {
+                            json["id"] = id;
+                        }
+                        json["result"] = true;
+
+                        nlohmann::json msgJson =
+                            ros_nlohmann_converter::translatedMsgtoJson(
+                                *res->translated_message);
+
+                        // Encode to json only once
+                        if(compression == "cbor-raw")
+                        {
+                            std::vector<uint8_t> data(res->input_message->buffer(),
+                                                      res->input_message->buffer() +
+                                                          res->input_message->size());
+                            nlohmann::json::binary_t jsonBin{data};
+                            json["values"] = {{"bytes", jsonBin}};
+                            sendBinaryMsg(client, nlohmann::json::to_cbor(json));
+                        }
+                        else
+                        {
+                            json["values"] = msgJson;
+                            if(compression == "cbor")
+                            {
+                                sendBinaryMsg(client, nlohmann::json::to_cbor(json));
+                            }
+                            sendMsg(client, json.dump());
+                        }
                     }
                     else
                     {
@@ -298,6 +351,7 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args,
                 [this, client, serviceName = args.serviceName](const QString& errorMsg) {
                     if(client != nullptr)
                     {
+                        // TODO send status error or service_response?
                         sendStatus(client, rbp::StatusLevel::Error,
                                    errorMsg.toStdString());
                     }
@@ -451,24 +505,63 @@ void ROSNode::onWSServerError(QWebSocketProtocol::CloseCode error)
 void ROSNode::handleROSMessage(const std::string& topic,
                                const ros_babel_fish::BabelFishMessage::ConstPtr& msg)
 {
+    auto receivedTime = ros::Time::now();
     ROS_DEBUG_STREAM_NAMED("topic", "Handle ROS msg on topic " << topic);
     QElapsedTimer t;
     t.start();
+    /*
+        rapidjson::Document jsonDoc;
+        jsonDoc.SetObject();
+        jsonDoc.AddMember("op", "publish", jsonDoc.GetAllocator());
+        jsonDoc.AddMember("topic", topic, jsonDoc.GetAllocator());
+        rapidjson::Value jsonMsg;
+        ros_rapidjson_converter::toJson(*m_fish, *msg, jsonMsg, jsonDoc.GetAllocator());
+        jsonDoc.AddMember("msg", jsonMsg, jsonDoc.GetAllocator());
 
-    rapidjson::Document jsonDoc;
-    jsonDoc.SetObject();
-    jsonDoc.AddMember("op", "publish", jsonDoc.GetAllocator());
-    jsonDoc.AddMember("topic", topic, jsonDoc.GetAllocator());
-    rapidjson::Value jsonMsg;
-    ros_rapidjson_converter::toJson(*m_fish, *msg, jsonMsg, jsonDoc.GetAllocator());
-    jsonDoc.AddMember("msg", jsonMsg, jsonDoc.GetAllocator());
+        ROS_DEBUG_STREAM_NAMED("topic", "Converted message on topic "
+                                            << topic << " to rapidjson::Document in "
+                                            << t.nsecsElapsed() / 1000 << " us");
+        t.start();
+        // Encode to json only once
+        const std::string jsonStr = ros_rapidjson_converter::jsonToString(jsonDoc);
+    */
 
+    nlohmann::json json{{"op", "publish"}, {"topic", topic}};
+    auto msgJson = ros_nlohmann_converter::toJson(*m_fish, *msg);
     ROS_DEBUG_STREAM_NAMED("topic", "Converted message on topic "
                                         << topic << " to rapidjson::Document in "
                                         << t.nsecsElapsed() / 1000 << " us");
     t.start();
+
     // Encode to json only once
-    const std::string jsonStr = ros_rapidjson_converter::jsonToString(jsonDoc);
+    std::string jsonStr;
+    std::vector<uint8_t> cborVect;
+    const bool hasJson = m_encodings.count(rbp::Encoding::JSON) > 0;
+    const bool hasCbor = m_encodings.count(rbp::Encoding::CBOR) > 0;
+    if(hasJson || hasCbor)
+    {
+        auto j = json;
+        j["msg"] = msgJson;
+        if(hasCbor)
+        {
+            cborVect = nlohmann::json::to_cbor(j);
+        }
+        if(hasJson)
+        {
+            jsonStr = j.dump();
+        }
+    }
+
+    std::vector<uint8_t> cborRawVect;
+    if(m_encodings.count(rbp::Encoding::CBOR_RAW) > 0)
+    {
+        auto j = json;
+        std::vector<uint8_t> data(msg->buffer(), msg->buffer() + msg->size());
+        nlohmann::json::binary_t jsonBin{data};
+        j["msg"] = {
+            {"secs", receivedTime.sec}, {"nsecs", receivedTime.nsec}, {"bytes", jsonBin}};
+        cborRawVect = nlohmann::json::to_cbor(j);
+    }
 
     ROS_DEBUG_STREAM_NAMED("topic", "Converted message on topic "
                                         << topic << " from json to string in "
@@ -484,7 +577,18 @@ void ROSNode::handleROSMessage(const std::string& topic,
                    (ros::Time::now() - client->lastTimeMsgSent).toSec() >
                        client->throttleRate_ms / 1000.)
                 {
-                    sendMsg(client->client, jsonStr);
+                    if(client->encoding == rbp::Encoding::CBOR)
+                    {
+                        sendBinaryMsg(client->client, cborVect);
+                    }
+                    else if(client->encoding == rbp::Encoding::CBOR_RAW)
+                    {
+                        sendBinaryMsg(client->client, cborRawVect);
+                    }
+                    else
+                    {
+                        sendMsg(client->client, jsonStr);
+                    }
                     client->lastTimeMsgSent = ros::Time::now();
                 }
             }
@@ -532,6 +636,14 @@ void ROSNode::sendMsg(WSClient* client, const std::string& msg)
 void ROSNode::sendJson(WSClient* client, const rapidjson::Document& doc)
 {
     sendMsg(client, ros_rapidjson_converter::jsonToString(doc));
+}
+
+void ROSNode::sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg)
+{
+    ROS_DEBUG_STREAM_NAMED("json", "-> Send binary msg on ws");
+    auto data =
+        QByteArray(reinterpret_cast<const char*>(binaryMsg.data()), binaryMsg.size());
+    QMetaObject::invokeMethod(client, "sendBinaryMsg", Q_ARG(QByteArray, data));
 }
 
 void ROSNode::advertiseHandler(WSClient* client, const rapidjson::Value& json,

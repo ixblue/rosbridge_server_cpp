@@ -181,6 +181,15 @@ target_link_libraries(${PROJECT_NAME}_node
   ${PROJECT_NAME}
 )
 
+file(GLOB_RECURSE LAUNCH_FILES "launch/*")
+add_custom_target(launch_files SOURCES ${LAUNCH_FILES})
+
+file(GLOB_RECURSE PYTHON_FILES "test/*.py")
+add_custom_target(python_test_files SOURCES ${PYTHON_FILES})
+
+file(GLOB_RECURSE ROSTEST_FILES "test/*.test")
+add_custom_target(rostest_files SOURCES ${ROSTEST_FILES})
+
 #############
 ## Install ##
 #############
@@ -241,6 +250,10 @@ if (CATKIN_ENABLE_TESTING)
       DEPENDENCIES ROSJsonConverterTest
     )
   endif()
+
+  find_package(rostest REQUIRED)
+  add_rostest(test/test_cbor_raw.test)
+  add_rostest(test/test_json_pub.test)
 
   ## Add folders to be run by python nosetests
   # catkin_add_nosetests(test)
