@@ -220,8 +220,6 @@ void ROSNode::subscribe(WSClient* client, const rbp::SubscribeArgs& args)
             }
         }
 
-        ROS_DEBUG_STREAM("Subscribe to a new topic " << args.topic);
-
         ROSBridgeSubscriber sub;
         sub.sub = m_nh.subscribe<ros_babel_fish::BabelFishMessage>(
             args.topic, 100,
@@ -233,6 +231,7 @@ void ROSNode::subscribe(WSClient* client, const rbp::SubscribeArgs& args)
         sub.clients.push_back(getNewClient());
 
         m_subs.emplace(args.topic, std::move(sub));
+        ROS_DEBUG_STREAM("Subscribe to a new topic " << args.topic);
     }
 }
 
@@ -505,98 +504,122 @@ void ROSNode::onWSServerError(QWebSocketProtocol::CloseCode error)
 void ROSNode::handleROSMessage(const std::string& topic,
                                const ros_babel_fish::BabelFishMessage::ConstPtr& msg)
 {
-    auto receivedTime = ros::Time::now();
-    ROS_DEBUG_STREAM_NAMED("topic", "Handle ROS msg on topic " << topic);
-    QElapsedTimer t;
-    t.start();
-    /*
-        rapidjson::Document jsonDoc;
-        jsonDoc.SetObject();
-        jsonDoc.AddMember("op", "publish", jsonDoc.GetAllocator());
-        jsonDoc.AddMember("topic", topic, jsonDoc.GetAllocator());
-        rapidjson::Value jsonMsg;
-        ros_rapidjson_converter::toJson(*m_fish, *msg, jsonMsg, jsonDoc.GetAllocator());
-        jsonDoc.AddMember("msg", jsonMsg, jsonDoc.GetAllocator());
+    try
+    {
+        auto receivedTime = ros::Time::now();
+        ROS_DEBUG_STREAM_ONCE("Received ROS msg on topic " << topic);
+        ROS_DEBUG_STREAM_NAMED("topic", "Handle ROS msg on topic " << topic);
+        QElapsedTimer t;
+        t.start();
+        /*
+            rapidjson::Document jsonDoc;
+            jsonDoc.SetObject();
+            jsonDoc.AddMember("op", "publish", jsonDoc.GetAllocator());
+            jsonDoc.AddMember("topic", topic, jsonDoc.GetAllocator());
+            rapidjson::Value jsonMsg;
+            ros_rapidjson_converter::toJson(*m_fish, *msg, jsonMsg,
+           jsonDoc.GetAllocator()); jsonDoc.AddMember("msg", jsonMsg,
+           jsonDoc.GetAllocator());
 
+            ROS_DEBUG_STREAM_NAMED("topic", "Converted message on topic "
+                                                << topic << " to rapidjson::Document in "
+                                                << t.nsecsElapsed() / 1000 << " us");
+            t.start();
+            // Encode to json only once
+            const std::string jsonStr = ros_rapidjson_converter::jsonToString(jsonDoc);
+        */
+
+        nlohmann::json json{{"op", "publish"}, {"topic", topic}};
+        auto msgJson = ros_nlohmann_converter::toJson(*m_fish, *msg);
         ROS_DEBUG_STREAM_NAMED("topic", "Converted message on topic "
                                             << topic << " to rapidjson::Document in "
                                             << t.nsecsElapsed() / 1000 << " us");
         t.start();
+
         // Encode to json only once
-        const std::string jsonStr = ros_rapidjson_converter::jsonToString(jsonDoc);
-    */
-
-    nlohmann::json json{{"op", "publish"}, {"topic", topic}};
-    auto msgJson = ros_nlohmann_converter::toJson(*m_fish, *msg);
-    ROS_DEBUG_STREAM_NAMED("topic", "Converted message on topic "
-                                        << topic << " to rapidjson::Document in "
-                                        << t.nsecsElapsed() / 1000 << " us");
-    t.start();
-
-    // Encode to json only once
-    std::string jsonStr;
-    std::vector<uint8_t> cborVect;
-    const bool hasJson = m_encodings.count(rbp::Encoding::JSON) > 0;
-    const bool hasCbor = m_encodings.count(rbp::Encoding::CBOR) > 0;
-    if(hasJson || hasCbor)
-    {
-        auto j = json;
-        j["msg"] = msgJson;
-        if(hasCbor)
+        std::string jsonStr;
+        std::vector<uint8_t> cborVect;
+        const bool hasJson = m_encodings.count(rbp::Encoding::JSON) > 0;
+        const bool hasCbor = m_encodings.count(rbp::Encoding::CBOR) > 0;
+        if(hasJson || hasCbor)
         {
-            cborVect = nlohmann::json::to_cbor(j);
-        }
-        if(hasJson)
-        {
-            jsonStr = j.dump();
-        }
-    }
-
-    std::vector<uint8_t> cborRawVect;
-    if(m_encodings.count(rbp::Encoding::CBOR_RAW) > 0)
-    {
-        auto j = json;
-        std::vector<uint8_t> data(msg->buffer(), msg->buffer() + msg->size());
-        nlohmann::json::binary_t jsonBin{data};
-        j["msg"] = {
-            {"secs", receivedTime.sec}, {"nsecs", receivedTime.nsec}, {"bytes", jsonBin}};
-        cborRawVect = nlohmann::json::to_cbor(j);
-    }
-
-    ROS_DEBUG_STREAM_NAMED("topic", "Converted message on topic "
-                                        << topic << " from json to string in "
-                                        << t.nsecsElapsed() / 1000 << " us");
-
-    if(const auto it = m_subs.find(topic); it != m_subs.end())
-    {
-        for(auto& client : it->second.clients)
-        {
-            if(client->client->isReady())
+            auto j = json;
+            j["msg"] = msgJson;
+            if(hasCbor)
             {
-                if(client->throttleRate_ms == 0 ||
-                   (ros::Time::now() - client->lastTimeMsgSent).toSec() >
-                       client->throttleRate_ms / 1000.)
+                cborVect = nlohmann::json::to_cbor(j);
+            }
+            if(hasJson)
+            {
+                jsonStr = j.dump();
+            }
+        }
+
+        std::vector<uint8_t> cborRawVect;
+        if(m_encodings.count(rbp::Encoding::CBOR_RAW) > 0)
+        {
+            auto j = json;
+            std::vector<uint8_t> data(msg->buffer(), msg->buffer() + msg->size());
+            nlohmann::json::binary_t jsonBin{data};
+            j["msg"] = {{"secs", receivedTime.sec},
+                        {"nsecs", receivedTime.nsec},
+                        {"bytes", jsonBin}};
+            cborRawVect = nlohmann::json::to_cbor(j);
+        }
+
+        ROS_DEBUG_STREAM_NAMED("topic", "Converted message on topic "
+                                            << topic << " from json to string in "
+                                            << t.nsecsElapsed() / 1000 << " us");
+
+        if(const auto it = m_subs.find(topic); it != m_subs.end())
+        {
+            for(auto& client : it->second.clients)
+            {
+                if(client->client->isReady())
                 {
-                    if(client->encoding == rbp::Encoding::CBOR)
+                    if(client->throttleRate_ms == 0 ||
+                       (ros::Time::now() - client->lastTimeMsgSent).toSec() >
+                           client->throttleRate_ms / 1000.)
                     {
-                        sendBinaryMsg(client->client, cborVect);
+                        if(client->encoding == rbp::Encoding::CBOR)
+                        {
+                            sendBinaryMsg(client->client, cborVect);
+                        }
+                        else if(client->encoding == rbp::Encoding::CBOR_RAW)
+                        {
+                            sendBinaryMsg(client->client, cborRawVect);
+                        }
+                        else
+                        {
+                            sendMsg(client->client, jsonStr);
+                        }
+                        client->lastTimeMsgSent = ros::Time::now();
                     }
-                    else if(client->encoding == rbp::Encoding::CBOR_RAW)
-                    {
-                        sendBinaryMsg(client->client, cborRawVect);
-                    }
-                    else
-                    {
-                        sendMsg(client->client, jsonStr);
-                    }
-                    client->lastTimeMsgSent = ros::Time::now();
+                }
+                else
+                {
+                    ROS_WARN_STREAM("Client " << client->client->name()
+                                              << " not ready, skip this msg");
                 }
             }
-            else
+        }
+    }
+    catch(const ros_babel_fish::BabelFishException& e)
+    {
+        std::ostringstream ss;
+        ss << "Error on ROS message received on topic " << topic << ": " << e.what();
+        if(const auto it = m_subs.find(topic); it != m_subs.end())
+        {
+            for(auto& client : it->second.clients)
             {
-                ROS_WARN_STREAM("Client " << client->client->name()
-                                          << " not ready, skip this msg");
+
+                sendStatus(client->client, rbp::StatusLevel::Error, ss.str(),
+                           "subscribe_" + topic);
             }
+        }
+        else
+        {
+            ROS_ERROR_STREAM(ss.str());
         }
     }
 }
