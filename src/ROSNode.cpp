@@ -426,6 +426,12 @@ void ROSNode::onWSMessage(const QString& message)
     }
 }
 
+void ROSNode::onWSBinaryMessage(const QByteArray& message)
+{
+    Q_UNUSED(message)
+    ROS_WARN_STREAM("Unhandled binary message received on WS");
+}
+
 void ROSNode::onWSClientDisconnected()
 {
     auto* client = qobject_cast<WSClient*>(sender());
@@ -490,6 +496,7 @@ void ROSNode::onNewWSConnection()
 
     auto client = std::make_shared<WSClient>(socket);
     connect(client.get(), &WSClient::onWSMessage, this, &ROSNode::onWSMessage);
+    connect(client.get(), &WSClient::onWSBinaryMessage, this, &ROSNode::onWSMessage);
     connect(client.get(), &WSClient::disconected, this, &ROSNode::onWSClientDisconnected);
 
     m_clients.push_back(client);

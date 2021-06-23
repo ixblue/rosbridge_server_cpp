@@ -29,6 +29,7 @@ public slots:
 
 signals:
     void onWSMessage(const QString& msg);
+    void onWSBinaryMessage(const QByteArray& msg);
     void disconected();
 
 private:

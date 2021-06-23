@@ -56,6 +56,7 @@ public:
 
 public slots:
     void onWSMessage(const QString& message);
+    void onWSBinaryMessage(const QByteArray& message);
     void onWSClientDisconnected();
 
 private slots:

@@ -7,6 +7,7 @@
 WSClient::WSClient(QWebSocket* ws) : QObject(nullptr), m_ws{ws}
 {
     connect(m_ws, &QWebSocket::textMessageReceived, this, &WSClient::onWSMessage);
+    connect(m_ws, &QWebSocket::binaryMessageReceived, this, &WSClient::onWSBinaryMessage);
     connect(m_ws, &QWebSocket::disconnected, this, &WSClient::onWSDisconnected);
 
     connect(m_ws, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error),
