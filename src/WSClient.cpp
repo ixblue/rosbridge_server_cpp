@@ -4,7 +4,15 @@
 
 #include "WSClient.h"
 
-WSClient::WSClient(QWebSocket* ws) : QObject(nullptr), m_ws{ws}
+WSClient::WSClient(QWebSocket* ws) : QObject(nullptr), m_ws{ws} {}
+
+WSClient::~WSClient()
+{
+    ROS_DEBUG_STREAM("~WSClient " << name());
+    m_ws->deleteLater();
+}
+
+void WSClient::connectSignals()
 {
     connect(m_ws, &QWebSocket::textMessageReceived, this, &WSClient::onWSMessage);
     connect(m_ws, &QWebSocket::binaryMessageReceived, this, &WSClient::onWSBinaryMessage);
@@ -32,12 +40,6 @@ WSClient::WSClient(QWebSocket* ws) : QObject(nullptr), m_ws{ws}
 
     connect(&m_pingTimer, &QTimer::timeout, this, [this]() { m_ws->ping(); });
     m_pingTimer.start(2000);
-}
-
-WSClient::~WSClient()
-{
-    ROS_DEBUG_STREAM("~WSClient " << name());
-    m_ws->deleteLater();
 }
 
 std::string WSClient::name() const

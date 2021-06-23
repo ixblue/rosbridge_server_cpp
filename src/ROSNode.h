@@ -53,6 +53,7 @@ class ROSNode : public QObject
 public:
     explicit ROSNode(QObject* parent = nullptr);
     ~ROSNode();
+    void start();
 
 public slots:
     void onWSMessage(const QString& message);
@@ -112,5 +113,6 @@ private:
         m_opHandlers;
 
     // Parameters
+    int m_wsPort = 9090;
     double m_serviceTimeout = 5.0;
 };

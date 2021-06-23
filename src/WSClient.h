@@ -18,6 +18,7 @@ class WSClient : public QObject
 public:
     explicit WSClient(QWebSocket* ws);
     ~WSClient();
+    void connectSignals();
 
     std::string name() const;
     bool isReady() const;

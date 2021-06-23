@@ -36,19 +36,8 @@ ROSNode::ROSNode(QObject* parent)
            }}}
 {
     // Parameters
-    int port = 9090;
-    m_nh.getParam("port", port);
+    m_nh.getParam("port", m_wsPort);
     m_nh.getParam("service_timeout", m_serviceTimeout);
-
-    if(!m_wsServer.listen(QHostAddress::Any, port))
-    {
-        ROS_FATAL_STREAM("Failed to start WS server on port "
-                         << port << ": " << m_wsServer.errorString().toStdString());
-        exit(1);
-    }
-
-    ROS_INFO_STREAM("Start WS on port: " << m_wsServer.serverPort());
-    m_nh.setParam("actual_port", m_wsServer.serverPort());
 
     connect(&m_wsServer, &QWebSocketServer::newConnection, this,
             &ROSNode::onNewWSConnection);
@@ -60,6 +49,19 @@ ROSNode::ROSNode(QObject* parent)
 ROSNode::~ROSNode()
 {
     ROS_DEBUG_STREAM("~ROSNode");
+}
+
+void ROSNode::start()
+{
+    if(!m_wsServer.listen(QHostAddress::Any, m_wsPort))
+    {
+        ROS_FATAL_STREAM("Failed to start WS server on port "
+                         << m_wsPort << ": " << m_wsServer.errorString().toStdString());
+        exit(1);
+    }
+
+    ROS_INFO_STREAM("Start WS on port: " << m_wsServer.serverPort());
+    m_nh.setParam("actual_port", m_wsServer.serverPort());
 }
 
 void ROSNode::advertise(WSClient* client, const rbp::AdvertiseArgs& args)
@@ -497,6 +499,7 @@ void ROSNode::onNewWSConnection()
                     << socket->peerPort());
 
     auto client = std::make_shared<WSClient>(socket);
+    client->connectSignals();
     connect(client.get(), &WSClient::onWSMessage, this, &ROSNode::onWSMessage);
     connect(client.get(), &WSClient::onWSBinaryMessage, this, &ROSNode::onWSMessage);
     connect(client.get(), &WSClient::disconected, this, &ROSNode::onWSClientDisconnected);
