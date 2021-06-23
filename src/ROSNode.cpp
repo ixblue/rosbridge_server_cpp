@@ -221,6 +221,7 @@ void ROSNode::subscribe(WSClient* client, const rbp::SubscribeArgs& args)
         }
 
         ROSBridgeSubscriber sub;
+        sub.type = args.type;
         sub.sub = m_nh.subscribe<ros_babel_fish::BabelFishMessage>(
             args.topic, 100,
             [this,
@@ -531,8 +532,8 @@ void ROSNode::handleROSMessage(const std::string& topic,
 
         nlohmann::json json{{"op", "publish"}, {"topic", topic}};
         auto msgJson = ros_nlohmann_converter::toJson(*m_fish, *msg);
-        ROS_DEBUG_STREAM_NAMED("topic", "Converted message on topic "
-                                            << topic << " to rapidjson::Document in "
+        ROS_DEBUG_STREAM_NAMED("topic", "Converted ROS message on topic "
+                                            << topic << " to JSON struct in "
                                             << t.nsecsElapsed() / 1000 << " us");
         t.start();
 
@@ -567,8 +568,8 @@ void ROSNode::handleROSMessage(const std::string& topic,
             cborRawVect = nlohmann::json::to_cbor(j);
         }
 
-        ROS_DEBUG_STREAM_NAMED("topic", "Converted message on topic "
-                                            << topic << " from json to string in "
+        ROS_DEBUG_STREAM_NAMED("topic", "Converted JSON struct on topic "
+                                            << topic << " to wire format(s) in "
                                             << t.nsecsElapsed() / 1000 << " us");
 
         if(const auto it = m_subs.find(topic); it != m_subs.end())
@@ -607,8 +608,15 @@ void ROSNode::handleROSMessage(const std::string& topic,
     catch(const ros_babel_fish::BabelFishException& e)
     {
         std::ostringstream ss;
-        ss << "Error on ROS message received on topic " << topic << ": " << e.what();
-        if(const auto it = m_subs.find(topic); it != m_subs.end())
+        ss << "Error on ROS message received on topic " << topic;
+        const auto it = m_subs.find(topic);
+        if(it != m_subs.end())
+        {
+            ss << " of type " << it->second.type;
+        }
+        ss << ": " << e.what();
+
+        if(it != m_subs.end())
         {
             for(auto& client : it->second.clients)
             {

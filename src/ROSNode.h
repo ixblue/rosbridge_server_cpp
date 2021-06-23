@@ -43,6 +43,7 @@ struct SubscriberClient
 struct ROSBridgeSubscriber
 {
     ros::Subscriber sub;
+    std::string type;
     std::vector<std::shared_ptr<SubscriberClient>> clients;
 };
 
