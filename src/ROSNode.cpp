@@ -265,7 +265,7 @@ void ROSNode::unsubscribe(WSClient* client, const rbp::UnsubscribeArgs& args)
 void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args,
                           const rapidjson::Value& msg)
 {
-    ROS_INFO_STREAM("Call service " << args.serviceName);
+    ROS_INFO_STREAM_NAMED("service", "Call service " << args.serviceName);
     try
     {
         ros_babel_fish::Message::Ptr req = m_fish->createServiceRequest(args.serviceType);
@@ -339,8 +339,10 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args,
                     }
                     else
                     {
-                        ROS_ERROR_STREAM("Received response for service "
-                                         << serviceName << " but client ptr is now null");
+                        ROS_ERROR_STREAM_NAMED("service",
+                                               "Received response for service "
+                                                   << serviceName
+                                                   << " but client ptr is now null");
                     }
 
                     // Disconnect allows to drop all copies of serviceClient shared_ptr

@@ -9,8 +9,9 @@ ServiceCallerWithTimeout::ServiceCallerWithTimeout(
 {
     // Timeout Timer
     connect(&m_timeoutTimer, &QTimer::timeout, this, [this]() {
-        ROS_WARN_STREAM("Timeout on service call to " << m_serviceName
-                                                      << ", shutdown service client");
+        ROS_WARN_STREAM_NAMED("service", "Timeout on service call to "
+                                             << m_serviceName
+                                             << ", shutdown service client");
         m_hasTimedOut = true;
         // Emit timeout signal
         emit timeout();
@@ -22,7 +23,8 @@ ServiceCallerWithTimeout::ServiceCallerWithTimeout(
             {
                 m_serviceThread.join();
             }
-            ROS_DEBUG_STREAM("Service thread to " << m_serviceName << " joined");
+            ROS_DEBUG_STREAM_NAMED("service",
+                                   "Service thread to " << m_serviceName << " joined");
             deleteLater();
         });
     });
@@ -31,7 +33,8 @@ ServiceCallerWithTimeout::ServiceCallerWithTimeout(
     connect(this, &ServiceCallerWithTimeout::serviceCallFinished, this, [this]() {
         if(!m_hasTimedOut)
         {
-            ROS_DEBUG_STREAM("Service call to " << m_serviceName << " succeeded");
+            ROS_DEBUG_STREAM_NAMED("service",
+                                   "Service call to " << m_serviceName << " succeeded");
             m_timeoutTimer.stop();
             m_translatedResponse = m_fish->translateMessage(m_response);
             deleteLater();
@@ -39,10 +42,11 @@ ServiceCallerWithTimeout::ServiceCallerWithTimeout(
         }
         else
         {
-            ROS_WARN_STREAM(
+            ROS_WARN_STREAM_NAMED(
+                "service",
                 "Service call to "
-                << m_serviceName
-                << " has just finished but already timed out, ignore response");
+                    << m_serviceName
+                    << " has just finished but already timed out, ignore response");
             // No deleteLater, already called in timeoutThread
         }
     });
@@ -93,7 +97,7 @@ ServiceCallerWithTimeout::~ServiceCallerWithTimeout()
     {
         m_timeoutThread.join();
     }
-    ROS_DEBUG_STREAM("~ServiceCallerWithTimeout " << m_serviceName);
+    ROS_DEBUG_STREAM_NAMED("service", "~ServiceCallerWithTimeout " << m_serviceName);
 }
 
 void ServiceCallerWithTimeout::call()
@@ -102,7 +106,8 @@ void ServiceCallerWithTimeout::call()
 
     // Service thread
     m_serviceThread = std::thread([this]() {
-        ROS_DEBUG_STREAM("Calling service " << m_serviceName << " from a new thread");
+        ROS_DEBUG_STREAM_NAMED("service", "Calling service " << m_serviceName
+                                                             << " from a new thread");
         if(m_serviceClient.call(*m_request, *m_response))
         {
             emit serviceCallFinished();
