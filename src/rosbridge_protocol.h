@@ -3,7 +3,7 @@
 #include <map>
 #include <string>
 
-#include "rapidjson/document.h"
+#include "nlohmann/json.hpp"
 
 namespace rosbridge_protocol
 {
@@ -49,8 +49,7 @@ struct PublishArgs
 {
     std::string id;
     std::string topic;
-    // Not easy to do deep-copy (need allocator) so for now, the json value is passed by
-    // reference next to this struct rapidjson::Value msg;
+    nlohmann::json msg;
 };
 
 struct SubscribeArgs
@@ -75,9 +74,7 @@ struct CallServiceArgs
     std::string id;
     std::string serviceName;
     std::string serviceType;
-    // Not easy to do deep-copy (need allocator) so for now, the json value is passed by
-    // reference next to this struct
-    // rapidjson::Value args;
+    nlohmann::json args;
     int fragmentSize;
     std::string compression;
 };
@@ -86,7 +83,7 @@ struct ServiceResponseArgs
 {
     std::string id;
     std::string serviceName;
-    rapidjson::Value values;
+    nlohmann::json values;
     bool result;
 };
 

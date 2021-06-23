@@ -140,9 +140,4 @@ nlohmann::json toJson(ros_babel_fish::BabelFish& fish,
     return translatedMsgtoJson(*babelFishMsg);
 }
 
-std::string jsonToString(const nlohmann::json& json)
-{
-    return json.dump();
-}
-
 } // namespace ros_nlohman_converter

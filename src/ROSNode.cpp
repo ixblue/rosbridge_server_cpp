@@ -6,14 +6,11 @@
 
 #include "nlohmann/json.hpp"
 
-#include "rapidjson/writer.h"
-
 #include "ROSNode.h"
 #include "ServiceCallerWithTimeout.h"
 #include "WSClient.h"
-#include "rapidjson_to_ros.h"
+#include "nlohmann_to_ros.h"
 #include "ros_to_nlohmann.h"
-#include "ros_to_rapidjson.h"
 
 namespace rbp = rosbridge_protocol;
 
@@ -125,16 +122,15 @@ void ROSNode::unadvertise(WSClient* client, const rbp::UnadvertiseArgs& args)
     }
 }
 
-void ROSNode::publish(WSClient* client, const rbp::PublishArgs& args,
-                      const rapidjson::Value& msg)
+void ROSNode::publish(WSClient* client, const rbp::PublishArgs& args)
 {
     if(const auto it = m_pubs.find(args.topic); it != m_pubs.end())
     {
         try
         {
             ros_babel_fish::BabelFishMessage::Ptr rosMsg =
-                ros_rapidjson_converter::createMsg(*m_fish, it->second.type,
-                                                   ros::Time::now(), msg);
+                ros_nlohmann_converter::createMsg(*m_fish, it->second.type,
+                                                  ros::Time::now(), args.msg);
 
             ROS_DEBUG_STREAM("Publish a msg on topic " << args.topic);
             it->second.pub.publish(rosMsg);
@@ -264,15 +260,14 @@ void ROSNode::unsubscribe(WSClient* client, const rbp::UnsubscribeArgs& args)
     }
 }
 
-void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args,
-                          const rapidjson::Value& msg)
+void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
 {
     ROS_INFO_STREAM_NAMED("service", "Call service " << args.serviceName);
     try
     {
         ros_babel_fish::Message::Ptr req = m_fish->createServiceRequest(args.serviceType);
         auto& compound = req->as<ros_babel_fish::CompoundMessage>();
-        ros_rapidjson_converter::fillMessageFromJson(msg, compound);
+        ros_nlohmann_converter::fillMessageFromJson(args.args, compound);
 
         // Allocated on heap, will be deleted by calling deleteLater itself later
         // Used to properly delete in the timeoutThread
@@ -287,24 +282,6 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args,
                     if(client != nullptr)
                     {
                         auto res = serviceClient->getResponse();
-
-                        /*
-                        rapidjson::Document jsonDoc;
-                        jsonDoc.SetObject();
-                        jsonDoc.AddMember("op", "service_response",
-                                          jsonDoc.GetAllocator());
-                        if(!id.empty())
-                        {
-                            jsonDoc.AddMember("id", id, jsonDoc.GetAllocator());
-                        }
-                        jsonDoc.AddMember("service", serviceName, jsonDoc.GetAllocator());
-                        rapidjson::Value jsonMsg;
-                        ros_rapidjson_converter::translatedMsgtoJson(
-                            *res->translated_message, jsonMsg, jsonDoc.GetAllocator());
-                        jsonDoc.AddMember("values", jsonMsg, jsonDoc.GetAllocator());
-                        jsonDoc.AddMember("result", true, jsonDoc.GetAllocator());
-                        sendJson(client, jsonDoc);
-                        */
 
                         nlohmann::json json;
                         json["op"] = "service_response";
@@ -395,38 +372,48 @@ void ROSNode::onWSMessage(const QString& message)
 
     auto* client = qobject_cast<WSClient*>(sender());
 
-    rapidjson::Document doc;
-    doc.Parse(message.toUtf8());
-    if(doc.HasParseError())
+    try
     {
-        ROS_WARN_STREAM("Error "
-                        << doc.GetParseError()
-                        << " while parsing received json: " << message.toStdString());
-        return;
-    }
+        const auto json = nlohmann::json::parse(message.toStdString());
 
-    if(!doc.IsObject() || !doc.HasMember("op"))
-    {
-        ROS_WARN_STREAM(
-            "Received JSON is not a rosbridge message (not object or no 'op' field): "
-            << message.toStdString());
-        return;
-    }
+        if(!json.is_object())
+        {
+            ROS_WARN_STREAM(
+                "Received JSON is not a rosbridge message (not a JSON object): "
+                << message.toStdString());
+            return;
+        }
 
-    std::string id;
-    if(const auto it = doc.FindMember("id"); it != doc.MemberEnd())
-    {
-        id = it->value.GetString();
-    }
+        if(const auto opIt = json.find("op"); opIt != json.end())
+        {
+            const auto op = opIt->get<std::string>();
 
-    const std::string op{doc["op"].GetString()};
-    if(const auto it = m_opHandlers.find(op); it != m_opHandlers.end())
-    {
-        it->second(client, doc, id);
+            std::string id;
+            if(const auto it = json.find("id"); it != json.end())
+            {
+                id = it->get<std::string>();
+            }
+
+            if(const auto it = m_opHandlers.find(op); it != m_opHandlers.end())
+            {
+                it->second(client, json, id);
+            }
+            else
+            {
+                ROS_ERROR_STREAM("Received unkown OP '" << op << "' ignoring");
+            }
+        }
+        else
+        {
+            ROS_WARN_STREAM("Received JSON is not a rosbridge message (on 'op' element): "
+                            << message.toStdString());
+            return;
+        }
     }
-    else
+    catch(const nlohmann::json::exception& e)
     {
-        ROS_ERROR_STREAM("Received unkown OP '" << op << "' ignoring");
+        ROS_ERROR_STREAM("Failed to parse the JSON message: "
+                         << e.what() << " message: '" << message.toStdString() << "'");
     }
 }
 
@@ -524,24 +511,6 @@ void ROSNode::handleROSMessage(const std::string& topic,
         ROS_DEBUG_STREAM_NAMED("topic", "Handle ROS msg on topic " << topic);
         QElapsedTimer t;
         t.start();
-        /*
-            rapidjson::Document jsonDoc;
-            jsonDoc.SetObject();
-            jsonDoc.AddMember("op", "publish", jsonDoc.GetAllocator());
-            jsonDoc.AddMember("topic", topic, jsonDoc.GetAllocator());
-            rapidjson::Value jsonMsg;
-            ros_rapidjson_converter::toJson(*m_fish, *msg, jsonMsg,
-           jsonDoc.GetAllocator()); jsonDoc.AddMember("msg", jsonMsg,
-           jsonDoc.GetAllocator());
-
-            ROS_DEBUG_STREAM_NAMED("topic", "Converted message on topic "
-                                                << topic << " to rapidjson::Document in "
-                                                << t.nsecsElapsed() / 1000 << " us");
-            t.start();
-            // Encode to json only once
-            const std::string jsonStr = ros_rapidjson_converter::jsonToString(jsonDoc);
-        */
-
         nlohmann::json json{{"op", "publish"}, {"topic", topic}};
         auto msgJson = ros_nlohmann_converter::toJson(*m_fish, *msg);
         ROS_DEBUG_STREAM_NAMED("topic", "Converted ROS message on topic "
@@ -655,18 +624,14 @@ void ROSNode::sendStatus(WSClient* client, rbp::StatusLevel level, const std::st
     case rbp::StatusLevel::None: ROS_DEBUG_STREAM(msg); break;
     }
 
-    rapidjson::Document jsonDoc;
-    jsonDoc.SetObject();
-    jsonDoc.AddMember("op", "status", jsonDoc.GetAllocator());
+    nlohmann::json json{
+        {"op", "status"}, {"level", rbp::statusLevelStringMap.at(level)}, {"msg", msg}};
     if(!id.empty())
     {
-        jsonDoc.AddMember("id", id, jsonDoc.GetAllocator());
+        json["id"] = id;
     }
-    jsonDoc.AddMember("level", rbp::statusLevelStringMap.at(level),
-                      jsonDoc.GetAllocator());
-    jsonDoc.AddMember("msg", msg, jsonDoc.GetAllocator());
 
-    sendJson(client, jsonDoc);
+    sendMsg(client, json.dump());
 }
 
 void ROSNode::sendMsg(WSClient* client, const std::string& msg)
@@ -674,11 +639,6 @@ void ROSNode::sendMsg(WSClient* client, const std::string& msg)
     ROS_DEBUG_STREAM_NAMED("json", "-> Send on ws: '" << msg << "'");
     QMetaObject::invokeMethod(client, "sendMsg",
                               Q_ARG(QString, QString::fromStdString(msg)));
-}
-
-void ROSNode::sendJson(WSClient* client, const rapidjson::Document& doc)
-{
-    sendMsg(client, ros_rapidjson_converter::jsonToString(doc));
 }
 
 void ROSNode::sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg)
@@ -689,15 +649,15 @@ void ROSNode::sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binary
     QMetaObject::invokeMethod(client, "sendBinaryMsg", Q_ARG(QByteArray, data));
 }
 
-void ROSNode::advertiseHandler(WSClient* client, const rapidjson::Value& json,
+void ROSNode::advertiseHandler(WSClient* client, const nlohmann::json& json,
                                const std::string& id)
 {
     rbp::AdvertiseArgs args;
     args.id = id;
 
-    if(const auto it = json.FindMember("topic"); it != json.MemberEnd())
+    if(const auto it = json.find("topic"); it != json.end())
     {
-        args.topic = it->value.GetString();
+        args.topic = it->get<std::string>();
     }
     else
     {
@@ -705,9 +665,9 @@ void ROSNode::advertiseHandler(WSClient* client, const rapidjson::Value& json,
         return;
     }
 
-    if(const auto it = json.FindMember("type"); it != json.MemberEnd())
+    if(const auto it = json.find("type"); it != json.end())
     {
-        args.type = it->value.GetString();
+        args.type = it->get<std::string>();
     }
     else
     {
@@ -715,28 +675,28 @@ void ROSNode::advertiseHandler(WSClient* client, const rapidjson::Value& json,
         return;
     }
 
-    if(const auto it = json.FindMember("latch"); it != json.MemberEnd())
+    if(const auto it = json.find("latch"); it != json.end())
     {
-        args.latched = it->value.GetBool();
+        args.latched = it->get<bool>();
     }
 
-    if(const auto it = json.FindMember("queue_size"); it != json.MemberEnd())
+    if(const auto it = json.find("queue_size"); it != json.end())
     {
-        args.queueSize = it->value.GetInt();
+        args.queueSize = it->get<unsigned int>();
     }
 
     advertise(client, args);
 }
 
-void ROSNode::unadvertiseHandler(WSClient* client, const rapidjson::Value& json,
+void ROSNode::unadvertiseHandler(WSClient* client, const nlohmann::json& json,
                                  const std::string& id)
 {
     rbp::UnadvertiseArgs args;
     args.id = id;
 
-    if(const auto it = json.FindMember("topic"); it != json.MemberEnd())
+    if(const auto it = json.find("topic"); it != json.end())
     {
-        args.topic = it->value.GetString();
+        args.topic = it->get<std::string>();
     }
     else
     {
@@ -747,43 +707,44 @@ void ROSNode::unadvertiseHandler(WSClient* client, const rapidjson::Value& json,
     unadvertise(client, args);
 }
 
-void ROSNode::publishHandler(WSClient* client, const rapidjson::Value& json,
+void ROSNode::publishHandler(WSClient* client, const nlohmann::json& json,
                              const std::string& id)
 {
     rbp::PublishArgs args;
     args.id = id;
 
-    if(const auto it = json.FindMember("topic"); it != json.MemberEnd())
+    if(const auto it = json.find("topic"); it != json.end())
     {
-        args.topic = it->value.GetString();
+        args.topic = it->get<std::string>();
     }
     else
     {
-        ROS_WARN_STREAM("Received 'unadvertise' msg without required 'topic' key");
+        ROS_WARN_STREAM("Received 'publish' msg without required 'topic' key");
         return;
     }
 
-    if(const auto it = json.FindMember("msg"); it != json.MemberEnd())
+    if(const auto it = json.find("msg"); it != json.end())
     {
-        // To do deep-copy, use CopyFrom but require allocator, so a Document
-        publish(client, args, it->value);
+        args.msg = *it;
     }
     else
     {
-        ROS_WARN_STREAM("Received 'unadvertise' msg without required 'topic' key");
+        ROS_WARN_STREAM("Received 'publish' msg without required 'msg' key");
         return;
     }
+
+    publish(client, args);
 }
 
-void ROSNode::subscribeHandler(WSClient* client, const rapidjson::Value& json,
+void ROSNode::subscribeHandler(WSClient* client, const nlohmann::json& json,
                                const std::string& id)
 {
     rbp::SubscribeArgs args;
     args.id = id;
 
-    if(const auto it = json.FindMember("topic"); it != json.MemberEnd())
+    if(const auto it = json.find("topic"); it != json.end())
     {
-        args.topic = it->value.GetString();
+        args.topic = it->get<std::string>();
     }
     else
     {
@@ -791,43 +752,43 @@ void ROSNode::subscribeHandler(WSClient* client, const rapidjson::Value& json,
         return;
     }
 
-    if(const auto it = json.FindMember("type"); it != json.MemberEnd())
+    if(const auto it = json.find("type"); it != json.end())
     {
-        args.type = it->value.GetString();
+        args.type = it->get<std::string>();
     }
 
-    if(const auto it = json.FindMember("throttle_rate"); it != json.MemberEnd())
+    if(const auto it = json.find("throttle_rate"); it != json.end())
     {
-        args.throttleRate = it->value.GetInt();
+        args.throttleRate = it->get<int>();
     }
 
-    if(const auto it = json.FindMember("queue_size"); it != json.MemberEnd())
+    if(const auto it = json.find("queue_size"); it != json.end())
     {
-        args.queueSize = it->value.GetInt();
+        args.queueSize = it->get<unsigned int>();
     }
 
-    if(const auto it = json.FindMember("fragment_size"); it != json.MemberEnd())
+    if(const auto it = json.find("fragment_size"); it != json.end())
     {
-        args.fragmentSize = it->value.GetInt();
+        args.fragmentSize = it->get<int>();
     }
 
-    if(const auto it = json.FindMember("compression"); it != json.MemberEnd())
+    if(const auto it = json.find("compression"); it != json.end())
     {
-        args.compression = it->value.GetString();
+        args.compression = it->get<std::string>();
     }
 
     subscribe(client, args);
 }
 
-void ROSNode::unsubscribeHandler(WSClient* client, const rapidjson::Value& json,
+void ROSNode::unsubscribeHandler(WSClient* client, const nlohmann::json& json,
                                  const std::string& id)
 {
     rbp::UnsubscribeArgs args;
     args.id = id;
 
-    if(const auto it = json.FindMember("topic"); it != json.MemberEnd())
+    if(const auto it = json.find("topic"); it != json.end())
     {
-        args.topic = it->value.GetString();
+        args.topic = it->get<std::string>();
     }
     else
     {
@@ -838,15 +799,15 @@ void ROSNode::unsubscribeHandler(WSClient* client, const rapidjson::Value& json,
     unsubscribe(client, args);
 }
 
-void ROSNode::callServiceHandler(WSClient* client, const rapidjson::Value& json,
+void ROSNode::callServiceHandler(WSClient* client, const nlohmann::json& json,
                                  const std::string& id)
 {
     rbp::CallServiceArgs args;
     args.id = id;
 
-    if(const auto it = json.FindMember("service"); it != json.MemberEnd())
+    if(const auto it = json.find("service"); it != json.end())
     {
-        args.serviceName = it->value.GetString();
+        args.serviceName = it->get<std::string>();
     }
     else
     {
@@ -854,28 +815,24 @@ void ROSNode::callServiceHandler(WSClient* client, const rapidjson::Value& json,
         return;
     }
 
-    if(const auto it = json.FindMember("type"); it != json.MemberEnd())
+    if(const auto it = json.find("type"); it != json.end())
     {
-        args.serviceType = it->value.GetString();
+        args.serviceType = it->get<std::string>();
     }
 
-    if(const auto it = json.FindMember("fragment_size"); it != json.MemberEnd())
+    if(const auto it = json.find("fragment_size"); it != json.end())
     {
-        args.fragmentSize = it->value.GetInt();
+        args.fragmentSize = it->get<int>();
     }
 
-    if(const auto it = json.FindMember("compression"); it != json.MemberEnd())
+    if(const auto it = json.find("compression"); it != json.end())
     {
-        args.compression = it->value.GetString();
+        args.compression = it->get<std::string>();
     }
 
-    if(const auto it = json.FindMember("args"); it != json.MemberEnd())
+    if(const auto it = json.find("args"); it != json.end())
     {
-        callService(client, args, it->value);
+        args.args = *it;
     }
-    else
-    {
-        rapidjson::Value msg;
-        callService(client, args, msg);
-    }
+    callService(client, args);
 }

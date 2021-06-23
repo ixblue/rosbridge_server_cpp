@@ -11,7 +11,7 @@
 #include <QString>
 #include <QWebSocketServer>
 
-#include "rapidjson/document.h"
+#include "nlohmann/json.hpp"
 
 #include <ros/ros.h>
 #include <ros_babel_fish/babel_fish.h>
@@ -65,28 +65,26 @@ private slots:
     void onWSServerError(QWebSocketProtocol::CloseCode error);
 
     // Op handlers
-    void advertiseHandler(WSClient* client, const rapidjson::Value& json,
+    void advertiseHandler(WSClient* client, const nlohmann::json& json,
                           const std::string& id);
-    void unadvertiseHandler(WSClient* client, const rapidjson::Value& json,
+    void unadvertiseHandler(WSClient* client, const nlohmann::json& json,
                             const std::string& id);
-    void publishHandler(WSClient* client, const rapidjson::Value& json,
+    void publishHandler(WSClient* client, const nlohmann::json& json,
                         const std::string& id);
-    void subscribeHandler(WSClient* client, const rapidjson::Value& json,
+    void subscribeHandler(WSClient* client, const nlohmann::json& json,
                           const std::string& id);
-    void unsubscribeHandler(WSClient* client, const rapidjson::Value& json,
+    void unsubscribeHandler(WSClient* client, const nlohmann::json& json,
                             const std::string& id);
-    void callServiceHandler(WSClient* client, const rapidjson::Value& json,
+    void callServiceHandler(WSClient* client, const nlohmann::json& json,
                             const std::string& id);
 
     // rosbridge protocol
     void advertise(WSClient* client, const rosbridge_protocol::AdvertiseArgs& args);
     void unadvertise(WSClient* client, const rosbridge_protocol::UnadvertiseArgs& args);
-    void publish(WSClient* client, const rosbridge_protocol::PublishArgs& args,
-                 const rapidjson::Value& msg);
+    void publish(WSClient* client, const rosbridge_protocol::PublishArgs& args);
     void subscribe(WSClient* client, const rosbridge_protocol::SubscribeArgs& args);
     void unsubscribe(WSClient* client, const rosbridge_protocol::UnsubscribeArgs& args);
-    void callService(WSClient* client, const rosbridge_protocol::CallServiceArgs& args,
-                     const rapidjson::Value& msg);
+    void callService(WSClient* client, const rosbridge_protocol::CallServiceArgs& args);
 
 signals:
     void deleteServiceClient(const QString& serviceName);
@@ -97,7 +95,6 @@ private:
     void sendStatus(WSClient* client, rosbridge_protocol::StatusLevel level,
                     const std::string& msg, const std::string& id = std::string{});
     void sendMsg(WSClient* client, const std::string& msg);
-    void sendJson(WSClient* client, const rapidjson::Document& doc);
     void sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg);
 
     ros::NodeHandle m_nh;
@@ -109,7 +106,7 @@ private:
     std::vector<std::shared_ptr<WSClient>> m_clients;
 
     std::map<std::string,
-             std::function<void(WSClient*, const rapidjson::Value&, const std::string&)>>
+             std::function<void(WSClient*, const nlohmann::json&, const std::string&)>>
         m_opHandlers;
 
     // Parameters
