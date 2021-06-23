@@ -3,12 +3,12 @@
 
 #include <librosqt/QRosCallBackQueue.h>
 #include <std_msgs/String.h>
+#include <std_srvs/SetBool.h>
 
 #include "ROSNode.h"
 #include "WSClient.h"
 #include "nlohmann/json.hpp"
 
-//#include "CustomQtestMain.h"
 #include "BridgeTester.h"
 
 class MockWSClient : public WSClient
@@ -17,14 +17,14 @@ class MockWSClient : public WSClient
 public:
     MockWSClient() : WSClient{nullptr} {}
 
-    void sendMsg(const QString& msg) override { m_lastSentTextMsg = msg; }
+    void sendMsg(const QString& msg) override { m_lastSentTextMsgs.push_back(msg); }
     void sendBinaryMsg(const QByteArray& msg) override { m_lastSentBinaryMsg = msg; }
     bool isReady() const override { return true; }
     std::string name() const override { return "mock"; }
 
     void receivedTextMessage(const QString& msg) { emit onWSMessage(msg); }
 
-    QString m_lastSentTextMsg;
+    std::vector<QString> m_lastSentTextMsgs;
     QByteArray m_lastSentBinaryMsg;
 };
 
@@ -41,7 +41,7 @@ void BridgeTester::canSubscribeToATopicAndSendJson()
     client->receivedTextMessage(
         R"({"op":"subscribe","topic":"/hello","type":"std_msgs/String"})");
 
-    QVERIFY(client->m_lastSentTextMsg.isEmpty());
+    QVERIFY(client->m_lastSentTextMsgs.empty());
     QVERIFY(client->m_lastSentBinaryMsg.isEmpty());
 
     // Publish a message on the topic
@@ -54,15 +54,178 @@ void BridgeTester::canSubscribeToATopicAndSendJson()
 
     QTest::qWait(20);
 
-    QVERIFY(!client->m_lastSentTextMsg.isEmpty());
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
     QVERIFY(client->m_lastSentBinaryMsg.isEmpty());
 
     // Encode and decode JSON to get comparable strings
     const auto expectedJsonStr =
         R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})"_json.dump();
     const auto jsonStr =
-        nlohmann::json::parse(client->m_lastSentTextMsg.toStdString()).dump();
+        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString()).dump();
     QCOMPARE(jsonStr, expectedJsonStr);
+}
+
+void BridgeTester::twoClientsCanSubscribeToTheSameTopic()
+{
+    ros::NodeHandle nh;
+    ros::Publisher pub = nh.advertise<std_msgs::String>("/hello", 10, false);
+
+    // Create on heap because will call deleteLater in destructor
+    auto client1 = new MockWSClient();
+    auto client2 = new MockWSClient();
+    ROSNode node;
+    connect(client1, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+    connect(client2, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+    // Send JSON to mock socket
+    client1->receivedTextMessage(
+        R"({"op":"subscribe","topic":"/hello","type":"std_msgs/String"})");
+    client2->receivedTextMessage(
+        R"({"op":"subscribe","topic":"/hello","type":"std_msgs/String"})");
+
+    QVERIFY(client1->m_lastSentTextMsgs.empty());
+    QVERIFY(client2->m_lastSentTextMsgs.empty());
+
+    // Publish a message on the topic
+    const auto str = "hello";
+    {
+        std_msgs::String msg;
+        msg.data = str;
+        pub.publish(msg);
+    }
+
+    QTest::qWait(20);
+
+    QCOMPARE(client1->m_lastSentTextMsgs.size(), 1UL);
+    QCOMPARE(client2->m_lastSentTextMsgs.size(), 1UL);
+
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJsonStr =
+        R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})"_json.dump();
+    const auto json1Str =
+        nlohmann::json::parse(client1->m_lastSentTextMsgs.front().toStdString()).dump();
+    const auto json2Str =
+        nlohmann::json::parse(client1->m_lastSentTextMsgs.front().toStdString()).dump();
+    QCOMPARE(json1Str, expectedJsonStr);
+    QCOMPARE(json2Str, expectedJsonStr);
+}
+
+void BridgeTester::canSubscribeToATopicWithoutThrottle()
+{
+    ros::NodeHandle nh;
+    ros::Publisher pub = nh.advertise<std_msgs::String>("/hello", 10, false);
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        R"({"op":"subscribe","topic":"/hello","type":"std_msgs/String"})");
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+    QVERIFY(client->m_lastSentBinaryMsg.isEmpty());
+
+    // Publish a message on the topic
+    const auto str = "hello";
+    for(size_t i = 0; i < 20; i++)
+    {
+        std_msgs::String msg;
+        msg.data = str;
+        pub.publish(msg);
+    }
+
+    QTest::qWait(20);
+
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 20UL);
+
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJsonStr =
+        R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})"_json.dump();
+    for(const auto& msg : client->m_lastSentTextMsgs)
+    {
+        const auto jsonStr = nlohmann::json::parse(msg.toStdString()).dump();
+        QCOMPARE(jsonStr, expectedJsonStr);
+    }
+}
+
+void BridgeTester::canSubscribeToATopicWithThrottleRateBurst()
+{
+    ros::NodeHandle nh;
+    ros::Publisher pub = nh.advertise<std_msgs::String>("/hello", 10, false);
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        R"({"op":"subscribe","topic":"/hello","type":"std_msgs/String","throttle_rate":20})");
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+    QVERIFY(client->m_lastSentBinaryMsg.isEmpty());
+
+    // Publish a message on the topic
+    const auto str = "hello";
+    for(size_t i = 0; i < 20; i++)
+    {
+        std_msgs::String msg;
+        msg.data = str;
+        pub.publish(msg);
+    }
+
+    QTest::qWait(20);
+
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
+
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJsonStr =
+        R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})"_json.dump();
+    for(const auto& msg : client->m_lastSentTextMsgs)
+    {
+        const auto jsonStr = nlohmann::json::parse(msg.toStdString()).dump();
+        QCOMPARE(jsonStr, expectedJsonStr);
+    }
+}
+
+void BridgeTester::canSubscribeToATopicWithThrottleRate()
+{
+    ros::NodeHandle nh;
+    ros::Publisher pub = nh.advertise<std_msgs::String>("/hello", 10, false);
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        R"({"op":"subscribe","topic":"/hello","type":"std_msgs/String","throttle_rate":60})");
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+    QVERIFY(client->m_lastSentBinaryMsg.isEmpty());
+
+    // Publish a message on the topic
+    const auto str = "hello";
+    for(size_t i = 0; i < 4; i++)
+    {
+        std_msgs::String msg;
+        msg.data = str;
+        pub.publish(msg);
+        QTest::qWait(20);
+    }
+
+    QTest::qWait(20);
+
+    // Only 2 should be received
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 2UL);
+
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJsonStr =
+        R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})"_json.dump();
+    for(const auto& msg : client->m_lastSentTextMsgs)
+    {
+        const auto jsonStr = nlohmann::json::parse(msg.toStdString()).dump();
+        QCOMPARE(jsonStr, expectedJsonStr);
+    }
 }
 
 void BridgeTester::canSubscribeToATopicAndSendCBOR()
@@ -78,7 +241,7 @@ void BridgeTester::canSubscribeToATopicAndSendCBOR()
     client->receivedTextMessage(
         R"({"op":"subscribe","topic":"/hello","type":"std_msgs/String","compression":"cbor"})");
 
-    QVERIFY(client->m_lastSentTextMsg.isEmpty());
+    QVERIFY(client->m_lastSentTextMsgs.empty());
     QVERIFY(client->m_lastSentBinaryMsg.isEmpty());
 
     // Publish a message on the topic
@@ -91,11 +254,312 @@ void BridgeTester::canSubscribeToATopicAndSendCBOR()
 
     QTest::qWait(20);
 
-    QVERIFY(client->m_lastSentTextMsg.isEmpty());
+    QVERIFY(client->m_lastSentTextMsgs.empty());
     QVERIFY(!client->m_lastSentBinaryMsg.isEmpty());
 
     const auto expectedJson =
         R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})"_json;
+    const auto expectedCborData = nlohmann::json::to_cbor(expectedJson);
+    QCOMPARE(client->m_lastSentBinaryMsg,
+             QByteArray(reinterpret_cast<const char*>(expectedCborData.data()),
+                        expectedCborData.size()));
+}
+
+void BridgeTester::canSubscribeThenUnsubscribeToATopic()
+{
+    ros::NodeHandle nh;
+    ros::Publisher pub = nh.advertise<std_msgs::String>("/hello", 10, false);
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        R"({"op":"subscribe","topic":"/hello","type":"std_msgs/String"})");
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+    QVERIFY(client->m_lastSentBinaryMsg.isEmpty());
+
+    // Publish a message on the topic
+    const auto str = "hello";
+    {
+        std_msgs::String msg;
+        msg.data = str;
+        pub.publish(msg);
+    }
+
+    QTest::qWait(20);
+
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
+    QVERIFY(client->m_lastSentBinaryMsg.isEmpty());
+
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJsonStr =
+        R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})"_json.dump();
+    const auto jsonStr =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString()).dump();
+    QCOMPARE(jsonStr, expectedJsonStr);
+
+    // Clear buffer
+    client->m_lastSentTextMsgs.clear();
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+
+    // Unsubscribe
+    client->receivedTextMessage(R"({"op":"unsubscribe","topic":"/hello"})");
+
+    // Publish
+    {
+        std_msgs::String msg;
+        msg.data = str;
+        pub.publish(msg);
+    }
+
+    QTest::qWait(20);
+
+    // We should not have received the message
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+}
+
+void BridgeTester::canPublishOnATopicJSON()
+{
+    ros::NodeHandle nh;
+    bool hasReceivedMsg = false;
+    std::string receivedMsg;
+    ros::Subscriber pub = nh.subscribe<std_msgs::String>(
+        "/hello", 1,
+        [&hasReceivedMsg, &receivedMsg](const std_msgs::StringConstPtr& msg) {
+            receivedMsg = msg->data;
+            hasReceivedMsg = true;
+        });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        R"({"op":"advertise","topic":"/hello","type":"std_msgs/String"})");
+
+    QTest::qWait(20);
+
+    client->receivedTextMessage(
+        R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})");
+
+    QTest::qWait(20);
+
+    QVERIFY(hasReceivedMsg);
+    QCOMPARE(receivedMsg, std::string{"hello"});
+}
+
+void BridgeTester::canAdvertiseAndUnadvertiseATopic()
+{
+    ros::NodeHandle nh;
+    bool hasReceivedMsg = false;
+    std::string receivedMsg;
+    ros::Subscriber pub = nh.subscribe<std_msgs::String>(
+        "/hello", 1,
+        [&hasReceivedMsg, &receivedMsg](const std_msgs::StringConstPtr& msg) {
+            receivedMsg = msg->data;
+            hasReceivedMsg = true;
+        });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        R"({"op":"advertise","topic":"/hello","type":"std_msgs/String"})");
+
+    QTest::qWait(20);
+
+    {
+        // Check that the topic is advertised using the rosmaster API
+        ros::master::V_TopicInfo topics;
+        ros::master::getTopics(topics);
+        bool foundTopic = false;
+        for(const auto& topicInfo : topics)
+        {
+            if(topicInfo.name == "/hello" && topicInfo.datatype == "std_msgs/String")
+            {
+                foundTopic = true;
+                break;
+            }
+        }
+        QVERIFY(foundTopic);
+    }
+
+    // Publish a topic
+    client->receivedTextMessage(
+        R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})");
+
+    QTest::qWait(20);
+
+    QVERIFY(hasReceivedMsg);
+    QCOMPARE(receivedMsg, std::string{"hello"});
+
+    hasReceivedMsg = false;
+    receivedMsg.clear();
+
+    // Unadvertise
+    client->receivedTextMessage(R"({"op":"unadvertise","topic":"/hello"})");
+
+    QTest::qWait(60);
+
+    // Publish a topic
+    client->receivedTextMessage(
+        R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})");
+
+    QTest::qWait(20);
+
+    QVERIFY(!hasReceivedMsg);
+    QVERIFY(receivedMsg.empty());
+}
+
+void BridgeTester::cannotUnadvertiseATopicNotAdvertised()
+{
+    ros::NodeHandle nh;
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+
+    // Unadvertise
+    client->receivedTextMessage(R"({"op":"unadvertise","topic":"/hello"})");
+
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
+
+    const auto jsonRes =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString());
+    QCOMPARE(jsonRes["op"].get<std::string>(), std::string{"status"});
+    QCOMPARE(jsonRes["level"].get<std::string>(), std::string{"error"});
+}
+
+void BridgeTester::canCallAServiceJSON()
+{
+    ros::NodeHandle nh;
+    bool serviceHasBeenCalled = false;
+    bool serviceReq = false;
+    ros::ServiceServer service =
+        nh.advertiseService<std_srvs::SetBoolRequest, std_srvs::SetBoolResponse>(
+            "/set_bool",
+            [&serviceHasBeenCalled, &serviceReq](std_srvs::SetBoolRequest& req,
+                                                 std_srvs::SetBoolResponse& res) {
+                serviceHasBeenCalled = true;
+                serviceReq = req.data;
+                res.success = true;
+                res.message = "ok";
+                return true;
+            });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        R"({"op":"call_service","service":"/set_bool","type":"std_srvs/SetBool","args":{"data":true}})");
+
+    QTest::qWait(40);
+
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
+
+    QVERIFY(serviceHasBeenCalled);
+    QVERIFY(serviceReq);
+
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJsonStr =
+        R"({"op":"service_response","service":"/set_bool","values":{"success":true,"message":"ok"},"result":true})"_json
+            .dump();
+    const auto jsonStr =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString()).dump();
+    QCOMPARE(jsonStr, expectedJsonStr);
+}
+
+void BridgeTester::canCallAServiceWithId()
+{
+    ros::NodeHandle nh;
+    bool serviceHasBeenCalled = false;
+    bool serviceReq = false;
+    ros::ServiceServer service =
+        nh.advertiseService<std_srvs::SetBoolRequest, std_srvs::SetBoolResponse>(
+            "/set_bool",
+            [&serviceHasBeenCalled, &serviceReq](std_srvs::SetBoolRequest& req,
+                                                 std_srvs::SetBoolResponse& res) {
+                serviceHasBeenCalled = true;
+                serviceReq = req.data;
+                res.success = true;
+                res.message = "ok";
+                return true;
+            });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        R"({"op":"call_service","service":"/set_bool","type":"std_srvs/SetBool","args":{"data":true},"id":"my_id"})");
+
+    QTest::qWait(40);
+
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
+
+    QVERIFY(serviceHasBeenCalled);
+    QVERIFY(serviceReq);
+
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJsonStr =
+        R"({"op":"service_response","service":"/set_bool","values":{"success":true,"message":"ok"},"result":true,"id":"my_id"})"_json
+            .dump();
+    const auto jsonStr =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString()).dump();
+    QCOMPARE(jsonStr, expectedJsonStr);
+}
+
+void BridgeTester::canCallAServiceCBOR()
+{
+    ros::NodeHandle nh;
+    bool serviceHasBeenCalled = false;
+    bool serviceReq = false;
+    ros::ServiceServer service =
+        nh.advertiseService<std_srvs::SetBoolRequest, std_srvs::SetBoolResponse>(
+            "/set_bool",
+            [&serviceHasBeenCalled, &serviceReq](std_srvs::SetBoolRequest& req,
+                                                 std_srvs::SetBoolResponse& res) {
+                serviceHasBeenCalled = true;
+                serviceReq = req.data;
+                res.success = true;
+                res.message = "ok";
+                return true;
+            });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+
+    QVERIFY(client->m_lastSentBinaryMsg.isEmpty());
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        R"({"op":"call_service","service":"/set_bool","type":"std_srvs/SetBool","args":{"data":true},"compression":"cbor"})");
+
+    QTest::qWait(40);
+
+    QVERIFY(!client->m_lastSentBinaryMsg.isEmpty());
+
+    QVERIFY(serviceHasBeenCalled);
+    QVERIFY(serviceReq);
+
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJson =
+        R"({"op":"service_response","service":"/set_bool","values":{"success":true,"message":"ok"},"result":true})"_json;
     const auto expectedCborData = nlohmann::json::to_cbor(expectedJson);
     QCOMPARE(client->m_lastSentBinaryMsg,
              QByteArray(reinterpret_cast<const char*>(expectedCborData.data()),
