@@ -17,16 +17,16 @@ class WSClient : public QObject
     Q_OBJECT
 public:
     explicit WSClient(QWebSocket* ws);
-    ~WSClient();
+    virtual ~WSClient();
     void connectSignals();
 
-    std::string name() const;
-    bool isReady() const;
+    virtual std::string name() const;
+    virtual bool isReady() const;
 
 public slots:
     void onWSDisconnected();
-    void sendMsg(const QString& msg);
-    void sendBinaryMsg(const QByteArray& binaryMsg);
+    virtual void sendMsg(const QString& msg);
+    virtual void sendBinaryMsg(const QByteArray& binaryMsg);
 
 signals:
     void onWSMessage(const QString& msg);

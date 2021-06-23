@@ -1,0 +1,3 @@
+<launch>
+    <test test-name="bridge_tester" pkg="p_rosbridge_server_cpp" type="bridge_tester"/>
+</launch>

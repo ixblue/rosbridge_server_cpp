@@ -243,18 +243,24 @@ if (CATKIN_ENABLE_TESTING)
     target_link_libraries(ROSJsonConverterTest ${PROJECT_NAME} ${catkin_LIBRARIES})
   endif()
 
-  if(ENABLE_COVERAGE_TESTING)
-    set(COVERAGE_EXCLUDES "*/${PROJECT_NAME}/test*" "*/${PROJECT_NAME}/src/rapidjson*")
-    add_code_coverage(
-      NAME ${PROJECT_NAME}_coverage_report
-      DEPENDENCIES ROSJsonConverterTest
-    )
-  endif()
-
   find_package(rostest REQUIRED)
   add_rostest(test/test_cbor_raw.test)
   add_rostest(test/test_json_pub.test)
 
+  find_package(Qt5Test REQUIRED)
+
+  add_rostest_gtest(bridge_tester test/bridge_tester.test test/BridgeTester.cpp)
+  #catkin_add_gtest(bridge_tester test/BridgeTester.cpp)
+  target_link_libraries(bridge_tester ${PROJECT_NAME} ${catkin_LIBRARIES} Qt5::Test)
+
   ## Add folders to be run by python nosetests
   # catkin_add_nosetests(test)
+
+  if(ENABLE_COVERAGE_TESTING)
+    set(COVERAGE_EXCLUDES "*/${PROJECT_NAME}/test*" "*/${PROJECT_NAME}/src/rapidjson*" "*/${PROJECT_NAME}/src/nlohmann*")
+    add_code_coverage(
+      NAME ${PROJECT_NAME}_coverage_report
+      DEPENDENCIES ROSJsonConverterTest bridge_tester
+    )
+  endif()
 endif ()
