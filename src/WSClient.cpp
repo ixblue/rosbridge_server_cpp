@@ -4,7 +4,9 @@
 
 #include "WSClient.h"
 
-WSClient::WSClient(QWebSocket* ws) : QObject(nullptr), m_ws{ws} {}
+WSClient::WSClient(QWebSocket* ws)
+    : QObject(nullptr), m_ws{ws}, m_connectionTime{ros::Time::now()}
+{}
 
 WSClient::~WSClient()
 {
@@ -40,6 +42,16 @@ void WSClient::connectSignals()
 
     connect(&m_pingTimer, &QTimer::timeout, this, [this]() { m_ws->ping(); });
     m_pingTimer.start(2000);
+}
+
+std::string WSClient::ipAddress() const
+{
+    return m_ws->peerAddress().toString().toStdString();
+}
+
+ros::Time WSClient::connectionTime() const
+{
+    return m_connectionTime;
 }
 
 std::string WSClient::name() const

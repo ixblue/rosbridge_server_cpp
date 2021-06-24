@@ -97,7 +97,11 @@ private:
     void sendMsg(WSClient* client, const std::string& msg);
     void sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg);
 
+    void publishStats();
+
     ros::NodeHandle m_nh;
+    ros::Publisher m_clientsCountPub;
+    ros::Publisher m_connectedClientsPub;
     std::map<std::string, ROSBridgePublisher> m_pubs;
     std::map<std::string, ROSBridgeSubscriber> m_subs;
     std::shared_ptr<ros_babel_fish::BabelFish> m_fish;

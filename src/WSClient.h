@@ -6,6 +6,8 @@
 #include <QString>
 #include <QTimer>
 
+#include <ros/time.h>
+
 /*!
  * Very simple wrapper on top of QWebsocket
  */
@@ -20,6 +22,8 @@ public:
     virtual ~WSClient();
     void connectSignals();
 
+    std::string ipAddress() const;
+    ros::Time connectionTime() const;
     virtual std::string name() const;
     virtual bool isReady() const;
 
@@ -36,4 +40,5 @@ signals:
 private:
     QWebSocket* m_ws = nullptr;
     QTimer m_pingTimer;
+    ros::Time m_connectionTime;
 };

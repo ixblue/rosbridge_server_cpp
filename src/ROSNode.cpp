@@ -4,6 +4,9 @@
 #include <QMetaObject>
 #include <QWebSocket>
 
+#include <rosbridge_msgs/ConnectedClients.h>
+#include <std_msgs/Int32.h>
+
 #include "nlohmann/json.hpp"
 
 #include "ROSNode.h"
@@ -36,6 +39,10 @@ ROSNode::ROSNode(QObject* parent)
     m_nh.getParam("port", m_wsPort);
     m_nh.getParam("service_timeout", m_serviceTimeout);
 
+    m_clientsCountPub = m_nh.advertise<std_msgs::Int32>("client_count", 10, true);
+    m_connectedClientsPub =
+        m_nh.advertise<rosbridge_msgs::ConnectedClients>("connected_clients", 10, true);
+
     connect(&m_wsServer, &QWebSocketServer::newConnection, this,
             &ROSNode::onNewWSConnection);
     connect(&m_wsServer, &QWebSocketServer::serverError, this, &ROSNode::onWSServerError);
@@ -59,6 +66,8 @@ void ROSNode::start()
 
     ROS_INFO_STREAM("Start WS on port: " << m_wsServer.serverPort());
     m_nh.setParam("actual_port", m_wsServer.serverPort());
+
+    publishStats();
 }
 
 void ROSNode::advertise(WSClient* client, const rbp::AdvertiseArgs& args)
@@ -427,8 +436,7 @@ void ROSNode::onWSClientDisconnected()
 {
     auto* client = qobject_cast<WSClient*>(sender());
 
-    ROS_INFO_STREAM("Client " << client->name() << " disconnected (" << m_clients.size()
-                              << " client)");
+    const auto clientName = client->name();
 
     for(auto pubIt = m_pubs.begin(); pubIt != m_pubs.end();)
     {
@@ -475,7 +483,9 @@ void ROSNode::onWSClientDisconnected()
                        [client](const auto& elem) { return client == elem.get(); }),
         m_clients.end());
 
-    ROS_DEBUG_STREAM("Removed, now (" << m_clients.size() << " client)");
+    ROS_INFO_STREAM("Client " << clientName << " disconnected (" << m_clients.size()
+                              << " clients)");
+    publishStats();
 }
 
 void ROSNode::onNewWSConnection()
@@ -492,6 +502,8 @@ void ROSNode::onNewWSConnection()
     connect(client.get(), &WSClient::disconected, this, &ROSNode::onWSClientDisconnected);
 
     m_clients.push_back(client);
+
+    publishStats();
 }
 
 void ROSNode::onWSServerError(QWebSocketProtocol::CloseCode error)
@@ -647,6 +659,28 @@ void ROSNode::sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binary
     auto data =
         QByteArray(reinterpret_cast<const char*>(binaryMsg.data()), binaryMsg.size());
     QMetaObject::invokeMethod(client, "sendBinaryMsg", Q_ARG(QByteArray, data));
+}
+
+void ROSNode::publishStats()
+{
+    ROS_DEBUG("publishStats");
+    {
+        std_msgs::Int32 msg;
+        msg.data = static_cast<int32_t>(m_clients.size());
+        m_clientsCountPub.publish(msg);
+    }
+    {
+        rosbridge_msgs::ConnectedClients msg;
+        msg.clients.reserve(m_clients.size());
+        for(const auto& client : m_clients)
+        {
+            rosbridge_msgs::ConnectedClient c;
+            c.ip_address = client->ipAddress();
+            c.connection_time = client->connectionTime();
+            msg.clients.push_back(c);
+        }
+        m_connectedClientsPub.publish(msg);
+    }
 }
 
 void ROSNode::advertiseHandler(WSClient* client, const nlohmann::json& json,
