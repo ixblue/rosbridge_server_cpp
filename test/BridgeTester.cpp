@@ -436,6 +436,76 @@ void BridgeTester::cannotUnadvertiseATopicNotAdvertised()
     QCOMPARE(jsonRes["level"].get<std::string>(), std::string{"error"});
 }
 
+void BridgeTester::canPublishOnALatchedTopicAndSubscribeLater()
+{
+    ros::NodeHandle nh;
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+    // Advertise a latched topic
+    client->receivedTextMessage(
+        R"({"op":"advertise","topic":"/hello","type":"std_msgs/String","latch":true})");
+
+    // Publish a msg
+    client->receivedTextMessage(
+        R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})");
+
+    QTest::qWait(40);
+
+    // Create a subscriber
+    bool hasReceivedMsg = false;
+    std::string receivedMsg;
+    ros::Subscriber pub = nh.subscribe<std_msgs::String>(
+        "/hello", 1,
+        [&hasReceivedMsg, &receivedMsg](const std_msgs::StringConstPtr& msg) {
+            receivedMsg = msg->data;
+            hasReceivedMsg = true;
+        });
+
+    QTest::qWait(80);
+
+    // Message should be received because topic is latched
+    QVERIFY(hasReceivedMsg);
+    QCOMPARE(receivedMsg, std::string{"hello"});
+}
+
+void BridgeTester::cannotPublishOnANotLatchedTopicAndSubscribeLater()
+{
+    ros::NodeHandle nh;
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+    // Advertise a latched topic
+    client->receivedTextMessage(
+        R"({"op":"advertise","topic":"/hello","type":"std_msgs/String","latch":false})");
+
+    // Publish a msg
+    client->receivedTextMessage(
+        R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})");
+
+    QTest::qWait(40);
+
+    // Create a subscriber
+    bool hasReceivedMsg = false;
+    std::string receivedMsg;
+    ros::Subscriber pub = nh.subscribe<std_msgs::String>(
+        "/hello", 1,
+        [&hasReceivedMsg, &receivedMsg](const std_msgs::StringConstPtr& msg) {
+            receivedMsg = msg->data;
+            hasReceivedMsg = true;
+        });
+
+    QTest::qWait(80);
+
+    // Message should not be received because subscribed after publish on a topic not
+    // latched
+    QVERIFY(!hasReceivedMsg);
+}
+
 void BridgeTester::canCallAServiceJSON()
 {
     ros::NodeHandle nh;

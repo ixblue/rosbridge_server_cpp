@@ -15,6 +15,8 @@ private slots:
     void canSubscribeToATopicAndSendCBOR();
     void canSubscribeThenUnsubscribeToATopic();
     void canPublishOnATopicJSON();
+    void canPublishOnALatchedTopicAndSubscribeLater();
+    void cannotPublishOnANotLatchedTopicAndSubscribeLater();
     void canAdvertiseAndUnadvertiseATopic();
     void cannotUnadvertiseATopicNotAdvertised();
     void canCallAServiceJSON();
