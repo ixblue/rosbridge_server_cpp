@@ -1,3 +1,5 @@
+#include <limits>
+
 #include <gtest/gtest.h>
 
 #include <ros_babel_fish/babel_fish.h>
@@ -10,6 +12,7 @@
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/NavSatFix.h>
+#include <std_msgs/Float64.h>
 #include <std_msgs/String.h>
 
 #include "nlohmann_to_ros.h"
@@ -837,6 +840,87 @@ TYPED_TEST(JSONTester, CanConvertImageToJson)
     const std::string json = this->parser.toJsonString(fish, bfMsg);
     const auto expectedJson =
         R"({"header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},"height":3,"width":2,"encoding":"bgr8","is_bigendian":0,"step":6,"data":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanConvertFloat64ToJson)
+{
+    const std::string& datatype =
+        ros::message_traits::DataType<std_msgs::Float64>::value();
+    const std::string& definition =
+        ros::message_traits::Definition<std_msgs::Float64>::value();
+    const std::string& md5 = ros::message_traits::MD5Sum<std_msgs::Float64>::value();
+
+    std_msgs::Float64 msg;
+    msg.data = 3.14;
+
+    // Create serialized version of the message
+    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
+
+    ros_babel_fish::BabelFishMessage bfMsg;
+    bfMsg.morph(md5, datatype, definition);
+
+    ros_babel_fish::BabelFish fish;
+    fish.descriptionProvider()->getMessageDescription(bfMsg);
+    ros::serialization::deserializeMessage(serialized_msg, bfMsg);
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
+
+    const auto expectedJson = R"({"data":3.14})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanConvertFloat64InfinityToJson)
+{
+    const std::string& datatype =
+        ros::message_traits::DataType<std_msgs::Float64>::value();
+    const std::string& definition =
+        ros::message_traits::Definition<std_msgs::Float64>::value();
+    const std::string& md5 = ros::message_traits::MD5Sum<std_msgs::Float64>::value();
+
+    std_msgs::Float64 msg;
+    msg.data = std::numeric_limits<double>::infinity();
+
+    // Create serialized version of the message
+    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
+
+    ros_babel_fish::BabelFishMessage bfMsg;
+    bfMsg.morph(md5, datatype, definition);
+
+    ros_babel_fish::BabelFish fish;
+    fish.descriptionProvider()->getMessageDescription(bfMsg);
+    ros::serialization::deserializeMessage(serialized_msg, bfMsg);
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
+
+    const auto expectedJson = R"({"data":null})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanConvertFloat64NaNToJson)
+{
+    const std::string& datatype =
+        ros::message_traits::DataType<std_msgs::Float64>::value();
+    const std::string& definition =
+        ros::message_traits::Definition<std_msgs::Float64>::value();
+    const std::string& md5 = ros::message_traits::MD5Sum<std_msgs::Float64>::value();
+
+    std_msgs::Float64 msg;
+    msg.data = std::numeric_limits<double>::quiet_NaN();
+
+    // Create serialized version of the message
+    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
+
+    ros_babel_fish::BabelFishMessage bfMsg;
+    bfMsg.morph(md5, datatype, definition);
+
+    ros_babel_fish::BabelFish fish;
+    fish.descriptionProvider()->getMessageDescription(bfMsg);
+    ros::serialization::deserializeMessage(serialized_msg, bfMsg);
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
+
+    const auto expectedJson = R"({"data":null})";
     const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
     EXPECT_EQ(json, expectedOutput);
 }
