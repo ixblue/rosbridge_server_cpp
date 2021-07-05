@@ -7,7 +7,8 @@ Il utilise Qt pour l'implémentation Websocket et donc dépend de `libqt5websock
 Les "compressions" **JSON**, **CBOR** et **CBOR-RAW** sont supportés mais pas la compression **PNG**.
 
 Pas implémenté par rapport à la version Python :
-- Compression PNG
+- régler le niveau de verbosité des status
+- compression PNG
 - paquets fragmentés
 - authentification (`rosauth`)
 - service server
