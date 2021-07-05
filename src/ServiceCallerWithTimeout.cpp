@@ -25,6 +25,7 @@ ServiceCallerWithTimeout::ServiceCallerWithTimeout(
             }
             ROS_DEBUG_STREAM_NAMED("service",
                                    "Service thread to " << m_serviceName << " joined");
+            // Once both threads have finished, delete itself later in Qt event loop
             deleteLater();
         });
     });

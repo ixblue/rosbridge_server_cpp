@@ -19,6 +19,7 @@ private slots:
     void cannotPublishOnANotLatchedTopicAndSubscribeLater();
     void canAdvertiseAndUnadvertiseATopic();
     void cannotUnadvertiseATopicNotAdvertised();
+    void canChangeStatusLevel();
     void canCallAServiceJSON();
     void canCallAServiceWithId();
     void canCallAServiceCBOR();

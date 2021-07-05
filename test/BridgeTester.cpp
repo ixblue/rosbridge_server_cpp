@@ -341,8 +341,6 @@ void BridgeTester::canPublishOnATopicJSON()
     client->receivedTextMessage(
         R"({"op":"advertise","topic":"/hello","type":"std_msgs/String"})");
 
-    QTest::qWait(20);
-
     client->receivedTextMessage(
         R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})");
 
@@ -436,6 +434,24 @@ void BridgeTester::cannotUnadvertiseATopicNotAdvertised()
     QCOMPARE(jsonRes["level"].get<std::string>(), std::string{"error"});
 }
 
+void BridgeTester::canChangeStatusLevel()
+{
+    ros::NodeHandle nh;
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+
+    // Set status level to none
+    client->receivedTextMessage(R"({"op":"set_level","level":"none"})");
+
+    // Unadvertise
+    client->receivedTextMessage(R"({"op":"unadvertise","topic":"/hello"})");
+
+    // No status message sent
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+}
+
 void BridgeTester::canPublishOnALatchedTopicAndSubscribeLater()
 {
     ros::NodeHandle nh;
@@ -452,7 +468,7 @@ void BridgeTester::canPublishOnALatchedTopicAndSubscribeLater()
     client->receivedTextMessage(
         R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})");
 
-    QTest::qWait(40);
+    QTest::qWait(10);
 
     // Create a subscriber
     bool hasReceivedMsg = false;
@@ -487,7 +503,7 @@ void BridgeTester::cannotPublishOnANotLatchedTopicAndSubscribeLater()
     client->receivedTextMessage(
         R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})");
 
-    QTest::qWait(40);
+    QTest::qWait(10);
 
     // Create a subscriber
     bool hasReceivedMsg = false;

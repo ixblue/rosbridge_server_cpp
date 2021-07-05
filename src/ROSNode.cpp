@@ -18,7 +18,7 @@
 namespace rbp = rosbridge_protocol;
 
 ROSNode::ROSNode(QObject* parent)
-    : QObject(parent), m_nh{"~"}, m_wsServer{"rosbridge server",
+    : QObject(parent), m_nh{"~"}, m_wsServer{QStringLiteral("rosbridge server"),
                                              QWebSocketServer::NonSecureMode},
       m_opHandlers{
           {"advertise", [this](WSClient* c, const auto& j,
@@ -31,8 +31,10 @@ ROSNode::ROSNode(QObject* parent)
                                const auto& id) { subscribeHandler(c, j, id); }},
           {"unsubscribe", [this](WSClient* c, const auto& j,
                                  const auto& id) { unsubscribeHandler(c, j, id); }},
-          {"call_service", [this](WSClient* c, const auto& j, const auto& id) {
-               callServiceHandler(c, j, id);
+          {"call_service", [this](WSClient* c, const auto& j,
+                                  const auto& id) { callServiceHandler(c, j, id); }},
+          {"set_level", [this](WSClient* c, const auto& j, const auto& id) {
+               setLevelHandler(c, j, id);
            }}}
 {
     // Parameters
@@ -374,6 +376,14 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
     }
 }
 
+void ROSNode::setLevel(WSClient* client, const rosbridge_protocol::SetLevelArgs& args)
+{
+    Q_UNUSED(client)
+    m_currentStatusLevel = args.level;
+    ROS_INFO_STREAM("Change status level to "
+                    << rbp::statusLevelStringMap.at(args.level));
+}
+
 void ROSNode::onWSMessage(const QString& message)
 {
     ROS_DEBUG_STREAM_NAMED("json",
@@ -628,6 +638,13 @@ void ROSNode::handleROSMessage(const std::string& topic,
 void ROSNode::sendStatus(WSClient* client, rbp::StatusLevel level, const std::string& msg,
                          const std::string& id)
 {
+    if(level == rbp::StatusLevel::None)
+    {
+        ROS_ERROR_STREAM(
+            "Tried to send status with level None, not possible. Message was: " << msg);
+        return;
+    }
+
     switch(level)
     {
     case rbp::StatusLevel::Info: ROS_INFO_STREAM(msg); break;
@@ -636,14 +653,18 @@ void ROSNode::sendStatus(WSClient* client, rbp::StatusLevel level, const std::st
     case rbp::StatusLevel::None: ROS_DEBUG_STREAM(msg); break;
     }
 
-    nlohmann::json json{
-        {"op", "status"}, {"level", rbp::statusLevelStringMap.at(level)}, {"msg", msg}};
-    if(!id.empty())
+    if(level >= m_currentStatusLevel)
     {
-        json["id"] = id;
-    }
+        nlohmann::json json{{"op", "status"},
+                            {"level", rbp::statusLevelStringMap.at(level)},
+                            {"msg", msg}};
+        if(!id.empty())
+        {
+            json["id"] = id;
+        }
 
-    sendMsg(client, json.dump());
+        sendMsg(client, json.dump());
+    }
 }
 
 void ROSNode::sendMsg(WSClient* client, const std::string& msg)
@@ -869,4 +890,52 @@ void ROSNode::callServiceHandler(WSClient* client, const nlohmann::json& json,
         args.args = *it;
     }
     callService(client, args);
+}
+
+void ROSNode::setLevelHandler(WSClient* client, const nlohmann::json& json,
+                              const std::string& id)
+{
+    rbp::SetLevelArgs args;
+    args.id = id;
+
+    if(const auto it = json.find("level"); it != json.end())
+    {
+        const QString desiredLevel =
+            QString::fromStdString(it->get<std::string>()).toLower();
+        if(desiredLevel == "info")
+        {
+            args.level = rbp::StatusLevel::Info;
+        }
+        else if(desiredLevel == "warn")
+        {
+            args.level = rbp::StatusLevel::Warning;
+        }
+        else if(desiredLevel == "error")
+        {
+            args.level = rbp::StatusLevel::Error;
+        }
+        else if(desiredLevel == "none")
+        {
+            args.level = rbp::StatusLevel::None;
+        }
+        else
+        {
+            std::ostringstream ss;
+            ss << "Received 'set_level' request with unknown status level: '"
+               << desiredLevel.toStdString() << "', accepted values are: [";
+            for(const auto& [level, str] : rbp::statusLevelStringMap)
+            {
+                ss << str << " ";
+            }
+            ss << "]";
+            ROS_ERROR_STREAM(ss.str());
+        }
+    }
+    else
+    {
+        ROS_WARN_STREAM("Received 'set_level' msg without required 'level' key");
+        return;
+    }
+
+    setLevel(client, args);
 }

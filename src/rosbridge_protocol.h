@@ -10,10 +10,10 @@ namespace rosbridge_protocol
 
 enum class StatusLevel
 {
-    None,
     Info,
     Warning,
-    Error
+    Error,
+    None
 };
 
 enum class Encoding
@@ -85,6 +85,12 @@ struct ServiceResponseArgs
     std::string serviceName;
     nlohmann::json values;
     bool result;
+};
+
+struct SetLevelArgs
+{
+    std::string id;
+    StatusLevel level;
 };
 
 } // namespace rosbridge_protocol

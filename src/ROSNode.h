@@ -64,7 +64,7 @@ private slots:
     void onNewWSConnection();
     void onWSServerError(QWebSocketProtocol::CloseCode error);
 
-    // Op handlers
+    // JSON Op handlers
     void advertiseHandler(WSClient* client, const nlohmann::json& json,
                           const std::string& id);
     void unadvertiseHandler(WSClient* client, const nlohmann::json& json,
@@ -77,6 +77,8 @@ private slots:
                             const std::string& id);
     void callServiceHandler(WSClient* client, const nlohmann::json& json,
                             const std::string& id);
+    void setLevelHandler(WSClient* client, const nlohmann::json& json,
+                         const std::string& id);
 
     // rosbridge protocol
     void advertise(WSClient* client, const rosbridge_protocol::AdvertiseArgs& args);
@@ -85,6 +87,7 @@ private slots:
     void subscribe(WSClient* client, const rosbridge_protocol::SubscribeArgs& args);
     void unsubscribe(WSClient* client, const rosbridge_protocol::UnsubscribeArgs& args);
     void callService(WSClient* client, const rosbridge_protocol::CallServiceArgs& args);
+    void setLevel(WSClient* client, const rosbridge_protocol::SetLevelArgs& args);
 
 signals:
     void deleteServiceClient(const QString& serviceName);
@@ -108,6 +111,8 @@ private:
     std::set<rosbridge_protocol::Encoding> m_encodings;
     QWebSocketServer m_wsServer;
     std::vector<std::shared_ptr<WSClient>> m_clients;
+    rosbridge_protocol::StatusLevel m_currentStatusLevel =
+        rosbridge_protocol::StatusLevel::Error;
 
     std::map<std::string,
              std::function<void(WSClient*, const nlohmann::json&, const std::string&)>>
