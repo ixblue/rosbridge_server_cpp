@@ -123,8 +123,6 @@ catkin_package(
 ## Build ##
 ###########
 
-add_definitions(-DRAPIDJSON_HAS_STDSTRING=1)
-
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
@@ -138,8 +136,6 @@ add_library(${PROJECT_NAME}
     src/ROSNode.cpp
     src/WSClient.cpp
     src/ServiceCallerWithTimeout.cpp
-    src/ros_to_rapidjson.cpp
-    src/rapidjson_to_ros.cpp
     src/ros_to_nlohmann.cpp
     src/nlohmann_to_ros.cpp
 )
@@ -257,7 +253,7 @@ if (CATKIN_ENABLE_TESTING)
   # catkin_add_nosetests(test)
 
   if(ENABLE_COVERAGE_TESTING)
-    set(COVERAGE_EXCLUDES "*/${PROJECT_NAME}/test*" "*/${PROJECT_NAME}/src/rapidjson*" "*/${PROJECT_NAME}/src/nlohmann*")
+    set(COVERAGE_EXCLUDES "*/${PROJECT_NAME}/test*" "*/${PROJECT_NAME}/src/nlohmann*")
     add_code_coverage(
       NAME ${PROJECT_NAME}_coverage_report
       DEPENDENCIES ROSJsonConverterTest bridge_tester

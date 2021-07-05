@@ -12,11 +12,6 @@
 #include <sensor_msgs/NavSatFix.h>
 #include <std_msgs/String.h>
 
-#include "rapidjson/document.h"
-
-#include "rapidjson_to_ros.h"
-#include "ros_to_rapidjson.h"
-
 #include "nlohmann_to_ros.h"
 #include "ros_to_nlohmann.h"
 
@@ -198,34 +193,6 @@ public:
     virtual std::string parseAndStringify(const std::string& jsonStr) = 0;
 };
 
-class RapidJSONParser : public JSONParser<rapidjson::Value>
-{
-public:
-    ros_babel_fish::BabelFishMessage::Ptr
-    createMsgFromJson(ros_babel_fish::BabelFish& fish, const std::string& type,
-                      const ros::Time& time, const std::string& jsonStr) override
-    {
-        rapidjson::Document doc;
-        doc.Parse(jsonStr);
-        return ros_rapidjson_converter::createMsg(fish, type, time, doc);
-    }
-
-    std::string toJsonString(ros_babel_fish::BabelFish& fish,
-                             const ros_babel_fish::BabelFishMessage& msg) override
-    {
-        rapidjson::Document doc;
-        ros_rapidjson_converter::toJson(fish, msg, doc, doc.GetAllocator());
-        return ros_rapidjson_converter::jsonToString(doc);
-    }
-
-    std::string parseAndStringify(const std::string& jsonStr) override
-    {
-        rapidjson::Document doc;
-        doc.Parse(jsonStr);
-        return ros_rapidjson_converter::jsonToString(doc);
-    }
-};
-
 class NlohmannJSONParser : public JSONParser<nlohmann::json>
 {
 public:
@@ -256,7 +223,7 @@ public:
 };
 
 // Lister les types a tester dans les arguments de template
-using ParserTypes = testing::Types<RapidJSONParser, NlohmannJSONParser>;
+using ParserTypes = testing::Types<NlohmannJSONParser>;
 
 // Defini les types sur lesquels faire les tests
 TYPED_TEST_CASE(JSONTester, ParserTypes);
