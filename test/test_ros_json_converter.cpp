@@ -1069,8 +1069,9 @@ TYPED_TEST(JSONTester, CanConvertImageToJson)
     fillMessage(msg);
     auto bfMsg = serializeMessage(fish, msg);
     const std::string json = this->parser.toJsonString(fish, bfMsg);
+    // uint8[] encoded as base64
     const auto expectedJson =
-        R"({"header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},"height":3,"width":2,"encoding":"bgr8","is_bigendian":0,"step":6,"data":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]})";
+        R"({"header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},"height":3,"width":2,"encoding":"bgr8","is_bigendian":0,"step":6,"data":"AAECAwQFBgcICQoLDA0ODxAR"})";
     const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
     EXPECT_EQ(json, expectedOutput);
 }
@@ -1081,8 +1082,9 @@ TYPED_TEST(JSONTester, CanConvertCompressedImageToJson)
     fillMessage(msg);
     auto bfMsg = serializeMessage(fish, msg);
     const std::string json = this->parser.toJsonString(fish, bfMsg);
+    // uint8[] encoded as base64
     const auto expectedJson =
-        R"({"header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},"format":"jpeg","data":[0,1,2,3,4,5,6,7,8,9]})";
+        R"({"header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},"format":"jpeg","data":"AAECAwQFBgcICQ=="})";
     const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
     EXPECT_EQ(json, expectedOutput);
 }
