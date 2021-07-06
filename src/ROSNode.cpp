@@ -18,8 +18,8 @@
 namespace rbp = rosbridge_protocol;
 
 ROSNode::ROSNode(QObject* parent)
-    : QObject(parent), m_nh{"~"}, m_wsServer{QStringLiteral("rosbridge server"),
-                                             QWebSocketServer::NonSecureMode},
+    : QObject(parent), m_nhPrivate{"~"}, m_wsServer{QStringLiteral("rosbridge server"),
+                                                    QWebSocketServer::NonSecureMode},
       m_opHandlers{
           {"advertise", [this](WSClient* c, const auto& j,
                                const auto& id) { advertiseHandler(c, j, id); }},
@@ -38,12 +38,12 @@ ROSNode::ROSNode(QObject* parent)
            }}}
 {
     // Parameters
-    m_nh.getParam("port", m_wsPort);
-    m_nh.getParam("service_timeout", m_serviceTimeout);
+    m_nhPrivate.getParam("port", m_wsPort);
+    m_nhPrivate.getParam("service_timeout", m_serviceTimeout);
 
-    m_clientsCountPub = m_nh.advertise<std_msgs::Int32>("client_count", 10, true);
+    m_clientsCountPub = m_nhNs.advertise<std_msgs::Int32>("client_count", 10, true);
     m_connectedClientsPub =
-        m_nh.advertise<rosbridge_msgs::ConnectedClients>("connected_clients", 10, true);
+        m_nhNs.advertise<rosbridge_msgs::ConnectedClients>("connected_clients", 10, true);
 
     connect(&m_wsServer, &QWebSocketServer::newConnection, this,
             &ROSNode::onNewWSConnection);
@@ -67,7 +67,7 @@ void ROSNode::start()
     }
 
     ROS_INFO_STREAM("Start WS on port: " << m_wsServer.serverPort());
-    m_nh.setParam("actual_port", m_wsServer.serverPort());
+    m_nhPrivate.setParam("actual_port", m_wsServer.serverPort());
 
     publishStats();
 }
@@ -104,11 +104,12 @@ void ROSNode::advertise(WSClient* client, const rbp::AdvertiseArgs& args)
         }
 
         ROS_DEBUG_STREAM("Create a new publisher on topic: " << args.topic);
-        m_pubs.emplace(args.topic,
-                       ROSBridgePublisher{args.type,
-                                          m_fish->advertise(m_nh, args.type, args.topic,
-                                                            args.queueSize, args.latched),
-                                          {client}});
+        m_pubs.emplace(
+            args.topic,
+            ROSBridgePublisher{args.type,
+                               m_fish->advertise(m_nhPrivate, args.type, args.topic,
+                                                 args.queueSize, args.latched),
+                               {client}});
     }
 }
 
@@ -231,7 +232,7 @@ void ROSNode::subscribe(WSClient* client, const rbp::SubscribeArgs& args)
 
         ROSBridgeSubscriber sub;
         sub.type = args.type;
-        sub.sub = m_nh.subscribe<ros_babel_fish::BabelFishMessage>(
+        sub.sub = m_nhPrivate.subscribe<ros_babel_fish::BabelFishMessage>(
             args.topic, 100,
             [this,
              topic = args.topic](const ros_babel_fish::BabelFishMessage::ConstPtr& msg) {

@@ -102,7 +102,8 @@ private:
 
     void publishStats();
 
-    ros::NodeHandle m_nh;
+    ros::NodeHandle m_nhPrivate;
+    ros::NodeHandle m_nhNs;
     ros::Publisher m_clientsCountPub;
     ros::Publisher m_connectedClientsPub;
     std::map<std::string, ROSBridgePublisher> m_pubs;
