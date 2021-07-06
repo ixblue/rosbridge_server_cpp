@@ -926,6 +926,7 @@ void ROSNode::setLevelHandler(WSClient* client, const nlohmann::json& json,
                << desiredLevel.toStdString() << "', accepted values are: [";
             for(const auto& [level, str] : rbp::statusLevelStringMap)
             {
+                (void)level;
                 ss << str << " ";
             }
             ss << "]";

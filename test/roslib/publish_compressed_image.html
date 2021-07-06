@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<script src="https://static.robotwebtools.org/EventEmitter2/current/eventemitter2.min.js"></script>
+<script src="roslib.min.js"></script>
+
+<script>
+  // Connecting to ROS
+  // -----------------
+  var ros = new ROSLIB.Ros();
+
+  // If there is an error on the backend, an 'error' emit will be emitted.
+  ros.on('error', function(error) {
+    document.getElementById('connecting').style.display = 'none';
+    document.getElementById('connected').style.display = 'none';
+    document.getElementById('closed').style.display = 'none';
+    document.getElementById('error').style.display = 'inline';
+    console.log(error);
+  });
+
+  // Find out exactly when we made a connection.
+  ros.on('connection', function() {
+    console.log('Connection made!');
+    document.getElementById('connecting').style.display = 'none';
+    document.getElementById('error').style.display = 'none';
+    document.getElementById('closed').style.display = 'none';
+    document.getElementById('connected').style.display = 'inline';
+  });
+
+  ros.on('close', function() {
+    console.log('Connection closed.');
+    document.getElementById('connecting').style.display = 'none';
+    document.getElementById('connected').style.display = 'none';
+    document.getElementById('closed').style.display = 'inline';
+  });
+
+  // Create a connection to the rosbridge WebSocket server.
+  ros.connect('ws://localhost:9090');
+
+  var imgPub = new ROSLIB.Topic({
+    ros : ros,
+    name : '/compressed_image',
+    messageType : 'sensor_msgs/CompressedImage'
+  });
+
+  var imgb64Pub = new ROSLIB.Topic({
+    ros : ros,
+    name : '/compressed_image_b64',
+    messageType : 'sensor_msgs/CompressedImage'
+  });
+
+  let img_data = [0, 1, 2, 3, 4];
+  var img = new ROSLIB.Message({
+    format : "jpeg",
+    data : img_data
+  });
+
+  let data_str = ""
+  for(let i = 0; i < img_data.length; i++) {
+    data_str += String.fromCharCode(img_data[i]);
+  }
+
+  let img_data_b64 = btoa(data_str)
+  console.log("img_data_b64 = " + img_data_b64)
+  var img_b64 = new ROSLIB.Message({
+    format : "jpeg",
+    data : img_data_b64
+  });
+
+  setTimeout(myTimer, 1000)
+  function myTimer() {
+    console.log("publish image")
+    imgPub.publish(img);
+    imgb64Pub.publish(img_b64);
+    setTimeout(myTimer, 1000)
+  }
+
+</script>
+</head>
+
+<body>
+  <h1>Simple roslib Example</h1>
+  <p>Run the following commands in the terminal then refresh this page. Check the JavaScript
+    console for the output.</p>
+  <ol>
+    <li><tt>roscore</tt></li>
+    <li><tt>rosrun p_rosbridge_server_cpp publish_compressed_image.py</tt></li>
+    <li><tt>roslaunch rosbridge_server rosbridge_websocket.launch</tt></li>
+  </ol>
+  <div id="statusIndicator">
+    <p id="connecting">
+      Connecting to rosbridge...
+    </p>
+    <p id="connected" style="color:#00D600; display:none">
+      Connected
+    </p>
+    <p id="error" style="color:#FF0000; display:none">
+      Error in the backend!
+    </p>
+    <p id="closed" style="display:none">
+      Connection closed.
+    </p>
+  </div>
+</body>
+</html>

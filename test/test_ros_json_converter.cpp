@@ -716,6 +716,101 @@ TYPED_TEST(JSONTester, CanFillCompressedImageFromJSON)
     }
 }
 
+TYPED_TEST(JSONTester, CanFillCompressedImageFromBase64JSON)
+{
+    const auto jsonData = R"({
+        "header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},
+        "format":"jpeg",
+        "data":"AAECAwQFBgcICQ=="
+    })";
+
+    ros_babel_fish::BabelFish fish;
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
+                        fish, "sensor_msgs/CompressedImage", g_rosTime, jsonData));
+
+    sensor_msgs::CompressedImage expectedMsg;
+    fillMessage(expectedMsg);
+    ros::SerializedMessage serializedExpectedMsg =
+        ros::serialization::serializeMessage(expectedMsg);
+
+    // Compare ROS encoded message
+    ASSERT_EQ(rosMsg->size(), serializedExpectedMsg.num_bytes - 4);
+    EXPECT_EQ(std::memcmp(rosMsg->buffer(), serializedExpectedMsg.message_start,
+                          rosMsg->size()),
+              0);
+
+    // Compare values
+    ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+    EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(),
+              expectedMsg.header.frame_id);
+    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), expectedMsg.header.seq);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec,
+              expectedMsg.header.stamp.sec);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec,
+              expectedMsg.header.stamp.nsec);
+    EXPECT_EQ(compound["format"].value<std::string>(), expectedMsg.format);
+    auto& base = compound["data"].as<ros_babel_fish::ArrayMessageBase>();
+    auto& array = base.as<ros_babel_fish::ArrayMessage<uint8_t>>();
+    ASSERT_EQ(array.length(), expectedMsg.data.size());
+    for(size_t i = 0; i < array.length(); ++i)
+    {
+        EXPECT_EQ(array[i], expectedMsg.data[i]);
+    }
+}
+
+TYPED_TEST(JSONTester, CanFillCompressedImageFromNullJSON)
+{
+    const auto jsonData = R"({
+        "header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},
+        "format":"jpeg",
+        "data":[null,null,null,null]
+    })";
+
+    ros_babel_fish::BabelFish fish;
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
+                        fish, "sensor_msgs/CompressedImage", g_rosTime, jsonData));
+
+    sensor_msgs::CompressedImage expectedMsg;
+    fillMessage(expectedMsg);
+    expectedMsg.data.clear();
+    expectedMsg.data.push_back(0);
+    expectedMsg.data.push_back(0);
+    expectedMsg.data.push_back(0);
+    expectedMsg.data.push_back(0);
+    ros::SerializedMessage serializedExpectedMsg =
+        ros::serialization::serializeMessage(expectedMsg);
+
+    // Compare ROS encoded message
+    ASSERT_EQ(rosMsg->size(), serializedExpectedMsg.num_bytes - 4);
+    EXPECT_EQ(std::memcmp(rosMsg->buffer(), serializedExpectedMsg.message_start,
+                          rosMsg->size()),
+              0);
+
+    // Compare values
+    ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+    EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(),
+              expectedMsg.header.frame_id);
+    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), expectedMsg.header.seq);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec,
+              expectedMsg.header.stamp.sec);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec,
+              expectedMsg.header.stamp.nsec);
+    EXPECT_EQ(compound["format"].value<std::string>(), expectedMsg.format);
+    auto& base = compound["data"].as<ros_babel_fish::ArrayMessageBase>();
+    auto& array = base.as<ros_babel_fish::ArrayMessage<uint8_t>>();
+    ASSERT_EQ(array.length(), expectedMsg.data.size());
+    for(size_t i = 0; i < array.length(); ++i)
+    {
+        EXPECT_EQ(array[i], expectedMsg.data[i]);
+    }
+}
+
 TYPED_TEST(JSONTester, CanFillOdometryFromJson)
 {
     const auto jsonData = R"({

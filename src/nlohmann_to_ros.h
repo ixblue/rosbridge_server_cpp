@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QByteArray>
+
 #include <cassert>
 #include <string>
 
@@ -15,6 +17,53 @@ namespace ros_nlohmann_converter
 void fillMessageFromJson(const nlohmann::json& json,
                          ros_babel_fish::CompoundMessage& message);
 
+void fillCompoundArray(const nlohmann::json& jsonArray,
+                       ros_babel_fish::CompoundArrayMessage& msgArray);
+
+template<typename T, typename U>
+void fillArrayLoop(const U& jsonArray, ros_babel_fish::ArrayMessage<T>& msgArray,
+                   bool isFixedSize)
+{
+    for(size_t i = 0; i < static_cast<size_t>(jsonArray.size()); ++i)
+    {
+        T val;
+        if constexpr(std::is_same_v<T, ros::Time>)
+        {
+            val.sec = jsonArray[i]["secs"].template get<uint32_t>();
+            val.nsec = jsonArray[i]["nsecs"].template get<uint32_t>();
+        }
+        else if constexpr(std::is_same_v<T, ros::Duration>)
+        {
+            val.sec = jsonArray[i]["secs"].template get<int32_t>();
+            val.nsec = jsonArray[i]["nsecs"].template get<int32_t>();
+        }
+        else
+        {
+            try
+            {
+                // cast for the case when jsonArray is QByteArray (base64 decoding)
+                val = jsonArray[static_cast<unsigned int>(i)];
+            }
+            catch(const nlohmann::detail::type_error& e)
+            {
+                (void)e;
+                // quiet_NaN produces 0 for integer types, this is ok to convert
+                // JSON null to 0
+                val = std::numeric_limits<T>::quiet_NaN();
+            }
+        }
+
+        if(isFixedSize)
+        {
+            msgArray.assign(i, val);
+        }
+        else
+        {
+            msgArray.push_back(val);
+        }
+    }
+}
+
 template<typename T>
 void fillArray(const nlohmann::json& jsonArray,
                ros_babel_fish::ArrayMessageBase& baseArray)
@@ -25,44 +74,26 @@ void fillArray(const nlohmann::json& jsonArray,
         assert(msgArray.length() == jsonArray.size());
     }
 
-    for(size_t i = 0; i < jsonArray.size(); ++i)
+    if constexpr(std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>)
     {
-        if(msgArray.isFixedSize())
+        if(jsonArray.is_string())
         {
-            try
-            {
-                msgArray.assign(i, jsonArray[i]);
-            }
-            catch(const nlohmann::detail::type_error& e)
-            {
-                (void)e;
-                msgArray.assign(i, std::numeric_limits<T>::quiet_NaN());
-            }
+            // Special case is encoded as base64
+            const QByteArray b64Data =
+                QByteArray::fromStdString(jsonArray.get<std::string>());
+            const QByteArray data = QByteArray::fromBase64(b64Data);
+            fillArrayLoop(data, msgArray, msgArray.isFixedSize());
         }
         else
         {
-            try
-            {
-                msgArray.push_back(jsonArray[i]);
-            }
-            catch(const nlohmann::detail::type_error& e)
-            {
-                (void)e;
-                msgArray.push_back(std::numeric_limits<T>::quiet_NaN());
-            }
+            fillArrayLoop(jsonArray, msgArray, msgArray.isFixedSize());
         }
     }
+    else
+    {
+        fillArrayLoop(jsonArray, msgArray, msgArray.isFixedSize());
+    }
 }
-
-template<>
-void fillArray<ros::Time>(const nlohmann::json& jsonArray,
-                          ros_babel_fish::ArrayMessageBase& baseArray);
-template<>
-void fillArray<ros::Duration>(const nlohmann::json& jsonArray,
-                              ros_babel_fish::ArrayMessageBase& baseArray);
-template<>
-void fillArray<ros_babel_fish::CompoundArrayMessage>(
-    const nlohmann::json& jsonArray, ros_babel_fish::ArrayMessageBase& baseArray);
 
 ros_babel_fish::BabelFishMessage::Ptr createMsg(ros_babel_fish::BabelFish& fish,
                                                 const std::string& type,

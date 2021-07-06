@@ -15,6 +15,31 @@ Pas implémenté par rapport à la version Python :
 - Autres transports que Websocket (TCP, UDP)
 - Mode BSON only
 
+## Détails d'implémentation
+
+### Données binaires
+
+Les tableaux de `int8[]` ou `uint8[]` sont encodés en string codée en base64.
+
+Par exemple le message `sensors_msgs/CompressedImage` suivant :
+
+```python
+m.header...
+m.format = "jpeg"
+m.data = [0,1,2,3,4,5,6,7,8,9]
+```
+
+Sera encodé en :
+
+```json
+{
+    "header": {"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},"format":"jpeg",
+    "data":"AAECAwQFBgcICQ=="
+}
+```
+
+Dans l'autre sens, à partir du JSON, les deux formats sont supportés. Tableau de int ou string en base64.
+
 ## Dépendances
 
 - `libqt5websockets5-dev`

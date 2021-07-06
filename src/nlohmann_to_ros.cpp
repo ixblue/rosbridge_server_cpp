@@ -1,3 +1,5 @@
+#include <QByteArray>
+
 #include "nlohmann_to_ros.h"
 
 using json = nlohmann::json;
@@ -5,68 +7,13 @@ using json = nlohmann::json;
 namespace ros_nlohmann_converter
 {
 
-template<>
-void fillArray<ros::Time>(const nlohmann::json& jsonArray,
-                          ros_babel_fish::ArrayMessageBase& baseArray)
+void fillCompoundArray(const nlohmann::json& jsonArray,
+                       ros_babel_fish::CompoundArrayMessage& msgArray)
 {
-    auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<ros::Time>>();
     if(msgArray.isFixedSize())
     {
         assert(msgArray.length() == jsonArray.size());
     }
-
-    for(size_t i = 0; i < jsonArray.size(); ++i)
-    {
-        ros::Time time;
-        time.sec = jsonArray[i]["secs"].get<uint32_t>();
-        time.nsec = jsonArray[i]["nsecs"].get<uint32_t>();
-        if(msgArray.isFixedSize())
-        {
-            msgArray.assign(i, time);
-        }
-        else
-        {
-            msgArray.push_back(time);
-        }
-    }
-}
-
-template<>
-void fillArray<ros::Duration>(const nlohmann::json& jsonArray,
-                              ros_babel_fish::ArrayMessageBase& baseArray)
-{
-    auto& msgArray = baseArray.as<ros_babel_fish::ArrayMessage<ros::Duration>>();
-    if(msgArray.isFixedSize())
-    {
-        assert(msgArray.length() == jsonArray.size());
-    }
-
-    for(size_t i = 0; i < jsonArray.size(); ++i)
-    {
-        ros::Duration time;
-        time.sec = jsonArray[i]["secs"].get<int32_t>();
-        time.nsec = jsonArray[i]["nsecs"].get<int32_t>();
-        if(msgArray.isFixedSize())
-        {
-            msgArray.assign(i, time);
-        }
-        else
-        {
-            msgArray.push_back(time);
-        }
-    }
-}
-
-template<>
-void fillArray<ros_babel_fish::CompoundArrayMessage>(
-    const nlohmann::json& jsonArray, ros_babel_fish::ArrayMessageBase& baseArray)
-{
-    auto& msgArray = baseArray.as<ros_babel_fish::CompoundArrayMessage>();
-    if(msgArray.isFixedSize())
-    {
-        assert(msgArray.length() == jsonArray.size());
-    }
-
     for(size_t i = 0; i < jsonArray.size(); ++i)
     {
         if(msgArray.isFixedSize())
@@ -143,7 +90,8 @@ void fillMessageFromJson(const nlohmann::json& json,
                 // Arrays of arrays are actually not supported in the ROS msg format
                 break;
             case ros_babel_fish::MessageTypes::Compound: {
-                fillArray<ros_babel_fish::CompoundArrayMessage>(m.value(), base);
+                fillCompoundArray(m.value(),
+                                  base.as<ros_babel_fish::CompoundArrayMessage>());
                 break;
             }
             }
