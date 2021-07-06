@@ -20,80 +20,90 @@ nlohmann::json translatedMsgtoJson(const ros_babel_fish::Message& message)
     else if(message.type() == ros_babel_fish::MessageTypes::Array)
     {
         const auto& base = message.as<ros_babel_fish::ArrayMessageBase>();
-        for(size_t i = 0; i < base.length(); ++i)
+        if(base.length() == 0)
         {
-            // Switch for each case is nt optimal at all
-            switch(base.elementType())
+            // Special case for empty array
+            out = json::array();
+        }
+        else
+        {
+            for(size_t i = 0; i < base.length(); ++i)
             {
-            case ros_babel_fish::MessageTypes::None: break;
-            case ros_babel_fish::MessageTypes::Bool:
-                out.push_back(base.as<ros_babel_fish::ArrayMessage<bool>>()[i]);
-                break;
-            case ros_babel_fish::MessageTypes::UInt8:
-                out.push_back(static_cast<unsigned int>(
-                    base.as<ros_babel_fish::ArrayMessage<uint8_t>>()[i]));
+                // Switch for each case is nt optimal at all
+                switch(base.elementType())
+                {
+                case ros_babel_fish::MessageTypes::None: break;
+                case ros_babel_fish::MessageTypes::Bool:
+                    out.push_back(base.as<ros_babel_fish::ArrayMessage<bool>>()[i]);
+                    break;
+                case ros_babel_fish::MessageTypes::UInt8:
+                    out.push_back(static_cast<unsigned int>(
+                        base.as<ros_babel_fish::ArrayMessage<uint8_t>>()[i]));
 
-                break;
-            case ros_babel_fish::MessageTypes::UInt16:
-                out.push_back(static_cast<unsigned int>(
-                    base.as<ros_babel_fish::ArrayMessage<uint16_t>>()[i]));
+                    break;
+                case ros_babel_fish::MessageTypes::UInt16:
+                    out.push_back(static_cast<unsigned int>(
+                        base.as<ros_babel_fish::ArrayMessage<uint16_t>>()[i]));
 
-                break;
-            case ros_babel_fish::MessageTypes::UInt32:
-                out.push_back(static_cast<unsigned int>(
-                    base.as<ros_babel_fish::ArrayMessage<uint32_t>>()[i]));
+                    break;
+                case ros_babel_fish::MessageTypes::UInt32:
+                    out.push_back(static_cast<unsigned int>(
+                        base.as<ros_babel_fish::ArrayMessage<uint32_t>>()[i]));
 
-                break;
-            case ros_babel_fish::MessageTypes::UInt64:
-                out.push_back(base.as<ros_babel_fish::ArrayMessage<uint64_t>>()[i]);
-                break;
-            case ros_babel_fish::MessageTypes::Int8:
-                out.push_back(
-                    static_cast<int>(base.as<ros_babel_fish::ArrayMessage<int8_t>>()[i]));
+                    break;
+                case ros_babel_fish::MessageTypes::UInt64:
+                    out.push_back(base.as<ros_babel_fish::ArrayMessage<uint64_t>>()[i]);
+                    break;
+                case ros_babel_fish::MessageTypes::Int8:
+                    out.push_back(static_cast<int>(
+                        base.as<ros_babel_fish::ArrayMessage<int8_t>>()[i]));
 
-                break;
-            case ros_babel_fish::MessageTypes::Int16:
-                out.push_back(static_cast<int>(
-                    base.as<ros_babel_fish::ArrayMessage<int16_t>>()[i]));
+                    break;
+                case ros_babel_fish::MessageTypes::Int16:
+                    out.push_back(static_cast<int>(
+                        base.as<ros_babel_fish::ArrayMessage<int16_t>>()[i]));
 
-                break;
-            case ros_babel_fish::MessageTypes::Int32:
-                out.push_back(static_cast<int>(
-                    base.as<ros_babel_fish::ArrayMessage<int32_t>>()[i]));
+                    break;
+                case ros_babel_fish::MessageTypes::Int32:
+                    out.push_back(static_cast<int>(
+                        base.as<ros_babel_fish::ArrayMessage<int32_t>>()[i]));
 
-                break;
-            case ros_babel_fish::MessageTypes::Int64:
-                out.push_back(base.as<ros_babel_fish::ArrayMessage<int64_t>>()[i]);
-                break;
-            case ros_babel_fish::MessageTypes::Float32:
-                out.push_back(base.as<ros_babel_fish::ArrayMessage<float>>()[i]);
-                break;
-            case ros_babel_fish::MessageTypes::Float64:
-                out.push_back(base.as<ros_babel_fish::ArrayMessage<double>>()[i]);
-                break;
-            case ros_babel_fish::MessageTypes::Time: {
-                const ros::Time& rosTime =
-                    base.as<ros_babel_fish::ArrayMessage<ros::Time>>()[i];
-                out.push_back(json{{"secs", rosTime.sec}, {"nsecs", rosTime.nsec}});
-                break;
-            }
-            case ros_babel_fish::MessageTypes::Duration: {
-                const ros::Duration& rosTime =
-                    base.as<ros_babel_fish::ArrayMessage<ros::Duration>>()[i];
-                out.push_back(json{{"secs", rosTime.sec}, {"nsecs", rosTime.nsec}});
-                break;
-            }
-            case ros_babel_fish::MessageTypes::String:
-                out.push_back(base.as<ros_babel_fish::ArrayMessage<std::string>>()[i]);
-                break;
-            case ros_babel_fish::MessageTypes::Array:
-                // Arrays of arrays are actually not supported in the ROS msg format
-                break;
-            case ros_babel_fish::MessageTypes::Compound: {
-                const auto& array = base.as<ros_babel_fish::CompoundArrayMessage>()[i];
-                out.push_back(translatedMsgtoJson(array));
-                break;
-            }
+                    break;
+                case ros_babel_fish::MessageTypes::Int64:
+                    out.push_back(base.as<ros_babel_fish::ArrayMessage<int64_t>>()[i]);
+                    break;
+                case ros_babel_fish::MessageTypes::Float32:
+                    out.push_back(base.as<ros_babel_fish::ArrayMessage<float>>()[i]);
+                    break;
+                case ros_babel_fish::MessageTypes::Float64:
+                    out.push_back(base.as<ros_babel_fish::ArrayMessage<double>>()[i]);
+                    break;
+                case ros_babel_fish::MessageTypes::Time: {
+                    const ros::Time& rosTime =
+                        base.as<ros_babel_fish::ArrayMessage<ros::Time>>()[i];
+                    out.push_back(json{{"secs", rosTime.sec}, {"nsecs", rosTime.nsec}});
+                    break;
+                }
+                case ros_babel_fish::MessageTypes::Duration: {
+                    const ros::Duration& rosTime =
+                        base.as<ros_babel_fish::ArrayMessage<ros::Duration>>()[i];
+                    out.push_back(json{{"secs", rosTime.sec}, {"nsecs", rosTime.nsec}});
+                    break;
+                }
+                case ros_babel_fish::MessageTypes::String:
+                    out.push_back(
+                        base.as<ros_babel_fish::ArrayMessage<std::string>>()[i]);
+                    break;
+                case ros_babel_fish::MessageTypes::Array:
+                    // Arrays of arrays are actually not supported in the ROS msg format
+                    break;
+                case ros_babel_fish::MessageTypes::Compound: {
+                    const auto& array =
+                        base.as<ros_babel_fish::CompoundArrayMessage>()[i];
+                    out.push_back(translatedMsgtoJson(array));
+                    break;
+                }
+                }
             }
         }
     }

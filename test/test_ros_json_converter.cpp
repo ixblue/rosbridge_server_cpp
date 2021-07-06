@@ -841,6 +841,38 @@ TYPED_TEST(JSONTester, CanFillChannelFloat32FromJson)
         }
     }
 }
+
+TYPED_TEST(JSONTester, CanFillEmptyChannelFloat32FromJson)
+{
+    const auto jsonData = R"({"name":"channel name","values":[]})";
+
+    ros_babel_fish::BabelFish fish;
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
+                        fish, "sensor_msgs/ChannelFloat32", g_rosTime, jsonData));
+
+    sensor_msgs::ChannelFloat32 expectedMsg;
+    expectedMsg.name = "channel name";
+    ros::SerializedMessage serializedExpectedMsg =
+        ros::serialization::serializeMessage(expectedMsg);
+
+    // Compare ROS encoded message
+    ASSERT_EQ(rosMsg->size(), serializedExpectedMsg.num_bytes - 4);
+    EXPECT_EQ(std::memcmp(rosMsg->buffer(), serializedExpectedMsg.message_start,
+                          rosMsg->size()),
+              0);
+
+    ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+    EXPECT_EQ(compound["name"].value<std::string>(), expectedMsg.name);
+    {
+        auto& base = compound["values"].as<ros_babel_fish::ArrayMessageBase>();
+        auto& array = base.as<ros_babel_fish::ArrayMessage<float>>();
+        ASSERT_EQ(array.length(), expectedMsg.values.size());
+    }
+}
+
 TYPED_TEST(JSONTester, CanFillChannelFloat32WithNullFromJson)
 {
     const auto jsonData = R"({"name":"channel name","values":[null,null]})";
@@ -1011,12 +1043,19 @@ TYPED_TEST(JSONTester, CanConvertChannelFloat32ToJson)
     EXPECT_EQ(json, expectedOutput);
 }
 
+TYPED_TEST(JSONTester, CanConvertEmptyChannelFloat32ToJson)
+{
     ros_babel_fish::BabelFish fish;
-    fish.descriptionProvider()->getMessageDescription(bfMsg);
-    ros::serialization::deserializeMessage(serialized_msg, bfMsg);
+    sensor_msgs::ChannelFloat32 msg;
+    msg.name = "channel name";
+    auto bfMsg = serializeMessage(fish, msg);
     const std::string json = this->parser.toJsonString(fish, bfMsg);
 
-    const auto expectedJson = R"({"data":null})";
+    const auto expectedJson = R"({"name":"channel name","values":[]})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
+
 TYPED_TEST(JSONTester, CanConvertChannelFloat32WithNaNAndInfinityToJson)
 {
     ros_babel_fish::BabelFish fish;
