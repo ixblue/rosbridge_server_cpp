@@ -10,6 +10,7 @@
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
+#include <sensor_msgs/ChannelFloat32.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/NavSatFix.h>
 #include <std_msgs/Float64.h>
@@ -161,15 +162,20 @@ void fillMessage(sensor_msgs::Image& m)
     }
 }
 
+void fillMessage(sensor_msgs::ChannelFloat32& msg)
+{
+    msg.name = "channel name";
+    msg.values.resize(5);
+    std::iota(msg.values.begin(), msg.values.end(), 0);
+}
+
 template<typename T>
-ros_babel_fish::BabelFishMessage serializeMessage(ros_babel_fish::BabelFish& fish)
+ros_babel_fish::BabelFishMessage serializeMessage(ros_babel_fish::BabelFish& fish,
+                                                  const T& msg)
 {
     const std::string& datatype = ros::message_traits::DataType<T>::value();
     const std::string& definition = ros::message_traits::Definition<T>::value();
     const std::string& md5 = ros::message_traits::MD5Sum<T>::value();
-
-    T msg;
-    fillMessage(msg);
 
     // Create serialized version of the message
     ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
@@ -773,6 +779,106 @@ TYPED_TEST(JSONTester, CanFillOdometryFromJson)
     }
 }
 
+TYPED_TEST(JSONTester, CanFillFloat64MsgFromJson)
+{
+    const auto jsonData = R"({"data":3.14})";
+
+    ros_babel_fish::BabelFish fish;
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(fish, "std_msgs/Float64",
+                                                            g_rosTime, jsonData));
+    ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+    EXPECT_EQ(compound["data"].value<double>(), 3.14);
+}
+
+TYPED_TEST(JSONTester, CanFillFloat64MsgFromJsonNull)
+{
+    const auto jsonData = R"({"data":null})";
+
+    ros_babel_fish::BabelFish fish;
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(fish, "std_msgs/Float64",
+                                                            g_rosTime, jsonData));
+    ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+    EXPECT_TRUE(std::isnan(compound["data"].value<double>()));
+}
+
+TYPED_TEST(JSONTester, CanFillChannelFloat32FromJson)
+{
+    const auto jsonData = R"({"name":"channel name","values":[0.0,1.0,2.0,3.0,4.0]})";
+
+    ros_babel_fish::BabelFish fish;
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
+                        fish, "sensor_msgs/ChannelFloat32", g_rosTime, jsonData));
+
+    sensor_msgs::ChannelFloat32 expectedMsg;
+    fillMessage(expectedMsg);
+    ros::SerializedMessage serializedExpectedMsg =
+        ros::serialization::serializeMessage(expectedMsg);
+
+    // Compare ROS encoded message
+    ASSERT_EQ(rosMsg->size(), serializedExpectedMsg.num_bytes - 4);
+    EXPECT_EQ(std::memcmp(rosMsg->buffer(), serializedExpectedMsg.message_start,
+                          rosMsg->size()),
+              0);
+
+    ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+    EXPECT_EQ(compound["name"].value<std::string>(), expectedMsg.name);
+    {
+        auto& base = compound["values"].as<ros_babel_fish::ArrayMessageBase>();
+        auto& array = base.as<ros_babel_fish::ArrayMessage<float>>();
+        ASSERT_EQ(array.length(), expectedMsg.values.size());
+        for(size_t i = 0; i < array.length(); ++i)
+        {
+            EXPECT_EQ(array[i], expectedMsg.values[i]);
+        }
+    }
+}
+TYPED_TEST(JSONTester, CanFillChannelFloat32WithNullFromJson)
+{
+    const auto jsonData = R"({"name":"channel name","values":[null,null]})";
+
+    ros_babel_fish::BabelFish fish;
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
+                        fish, "sensor_msgs/ChannelFloat32", g_rosTime, jsonData));
+
+    sensor_msgs::ChannelFloat32 expectedMsg;
+    expectedMsg.name = "channel name";
+    expectedMsg.values.push_back(std::numeric_limits<double>::quiet_NaN());
+    expectedMsg.values.push_back(std::numeric_limits<double>::quiet_NaN());
+    ros::SerializedMessage serializedExpectedMsg =
+        ros::serialization::serializeMessage(expectedMsg);
+
+    // Compare ROS encoded message
+    ASSERT_EQ(rosMsg->size(), serializedExpectedMsg.num_bytes - 4);
+    EXPECT_EQ(std::memcmp(rosMsg->buffer(), serializedExpectedMsg.message_start,
+                          rosMsg->size()),
+              0);
+
+    ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+    EXPECT_EQ(compound["name"].value<std::string>(), expectedMsg.name);
+    {
+        auto& base = compound["values"].as<ros_babel_fish::ArrayMessageBase>();
+        auto& array = base.as<ros_babel_fish::ArrayMessage<float>>();
+        ASSERT_EQ(array.length(), expectedMsg.values.size());
+        for(size_t i = 0; i < array.length(); ++i)
+        {
+            EXPECT_TRUE(std::isnan(array[i]));
+            EXPECT_TRUE(std::isnan(expectedMsg.values[i]));
+        }
+    }
+}
+
 /////////////////
 /// ROS to JSON
 /////////////////
@@ -780,7 +886,9 @@ TYPED_TEST(JSONTester, CanFillOdometryFromJson)
 TYPED_TEST(JSONTester, CanConvertSerializedPoseStampedToJson)
 {
     ros_babel_fish::BabelFish fish;
-    auto bfMsg = serializeMessage<geometry_msgs::PoseStamped>(fish);
+    geometry_msgs::PoseStamped msg;
+    fillMessage(msg);
+    auto bfMsg = serializeMessage(fish, msg);
 
     const std::string json = this->parser.toJsonString(fish, bfMsg);
     const auto expectedJson =
@@ -794,7 +902,9 @@ TYPED_TEST(JSONTester, CanConvertSerializedPoseStampedToJson)
 TYPED_TEST(JSONTester, CanConvertSerializedPoseStampedToJsonTwice)
 {
     ros_babel_fish::BabelFish fish;
-    auto bfMsg = serializeMessage<geometry_msgs::PoseStamped>(fish);
+    geometry_msgs::PoseStamped msg;
+    fillMessage(msg);
+    auto bfMsg = serializeMessage(fish, msg);
 
     const auto expectedJson =
         R"({"header":{"seq":0,"stamp":{"secs":34325435,"nsecs":432423},"frame_id":"robot"},"pose":{"position":{"x":1.0,"y":2.0,"z":3.0},"orientation":{"x":1.0,"y":2.0,"z":3.0,"w":4.0}}})";
@@ -812,7 +922,9 @@ TYPED_TEST(JSONTester, CanConvertSerializedPoseStampedToJsonTwice)
 TYPED_TEST(JSONTester, CanConvertNavSatFixToJson)
 {
     ros_babel_fish::BabelFish fish;
-    auto bfMsg = serializeMessage<sensor_msgs::NavSatFix>(fish);
+    sensor_msgs::NavSatFix msg;
+    fillMessage(msg);
+    auto bfMsg = serializeMessage(fish, msg);
     const std::string json = this->parser.toJsonString(fish, bfMsg);
 
     const auto expectedJson =
@@ -824,7 +936,9 @@ TYPED_TEST(JSONTester, CanConvertNavSatFixToJson)
 TYPED_TEST(JSONTester, CanConvertDiagnosticArrayToJson)
 {
     ros_babel_fish::BabelFish fish;
-    auto bfMsg = serializeMessage<diagnostic_msgs::DiagnosticArray>(fish);
+    diagnostic_msgs::DiagnosticArray msg;
+    fillMessage(msg);
+    auto bfMsg = serializeMessage(fish, msg);
     const std::string json = this->parser.toJsonString(fish, bfMsg);
 
     const auto expectedJson =
@@ -836,7 +950,9 @@ TYPED_TEST(JSONTester, CanConvertDiagnosticArrayToJson)
 TYPED_TEST(JSONTester, CanConvertImageToJson)
 {
     ros_babel_fish::BabelFish fish;
-    auto bfMsg = serializeMessage<sensor_msgs::Image>(fish);
+    sensor_msgs::Image msg;
+    fillMessage(msg);
+    auto bfMsg = serializeMessage(fish, msg);
     const std::string json = this->parser.toJsonString(fish, bfMsg);
     const auto expectedJson =
         R"({"header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},"height":3,"width":2,"encoding":"bgr8","is_bigendian":0,"step":6,"data":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]})";
@@ -846,24 +962,10 @@ TYPED_TEST(JSONTester, CanConvertImageToJson)
 
 TYPED_TEST(JSONTester, CanConvertFloat64ToJson)
 {
-    const std::string& datatype =
-        ros::message_traits::DataType<std_msgs::Float64>::value();
-    const std::string& definition =
-        ros::message_traits::Definition<std_msgs::Float64>::value();
-    const std::string& md5 = ros::message_traits::MD5Sum<std_msgs::Float64>::value();
-
+    ros_babel_fish::BabelFish fish;
     std_msgs::Float64 msg;
     msg.data = 3.14;
-
-    // Create serialized version of the message
-    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
-
-    ros_babel_fish::BabelFishMessage bfMsg;
-    bfMsg.morph(md5, datatype, definition);
-
-    ros_babel_fish::BabelFish fish;
-    fish.descriptionProvider()->getMessageDescription(bfMsg);
-    ros::serialization::deserializeMessage(serialized_msg, bfMsg);
+    auto bfMsg = serializeMessage(fish, msg);
     const std::string json = this->parser.toJsonString(fish, bfMsg);
 
     const auto expectedJson = R"({"data":3.14})";
@@ -873,24 +975,10 @@ TYPED_TEST(JSONTester, CanConvertFloat64ToJson)
 
 TYPED_TEST(JSONTester, CanConvertFloat64InfinityToJson)
 {
-    const std::string& datatype =
-        ros::message_traits::DataType<std_msgs::Float64>::value();
-    const std::string& definition =
-        ros::message_traits::Definition<std_msgs::Float64>::value();
-    const std::string& md5 = ros::message_traits::MD5Sum<std_msgs::Float64>::value();
-
+    ros_babel_fish::BabelFish fish;
     std_msgs::Float64 msg;
     msg.data = std::numeric_limits<double>::infinity();
-
-    // Create serialized version of the message
-    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
-
-    ros_babel_fish::BabelFishMessage bfMsg;
-    bfMsg.morph(md5, datatype, definition);
-
-    ros_babel_fish::BabelFish fish;
-    fish.descriptionProvider()->getMessageDescription(bfMsg);
-    ros::serialization::deserializeMessage(serialized_msg, bfMsg);
+    auto bfMsg = serializeMessage(fish, msg);
     const std::string json = this->parser.toJsonString(fish, bfMsg);
 
     const auto expectedJson = R"({"data":null})";
@@ -900,20 +988,28 @@ TYPED_TEST(JSONTester, CanConvertFloat64InfinityToJson)
 
 TYPED_TEST(JSONTester, CanConvertFloat64NaNToJson)
 {
-    const std::string& datatype =
-        ros::message_traits::DataType<std_msgs::Float64>::value();
-    const std::string& definition =
-        ros::message_traits::Definition<std_msgs::Float64>::value();
-    const std::string& md5 = ros::message_traits::MD5Sum<std_msgs::Float64>::value();
-
+    ros_babel_fish::BabelFish fish;
     std_msgs::Float64 msg;
     msg.data = std::numeric_limits<double>::quiet_NaN();
+    auto bfMsg = serializeMessage(fish, msg);
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
 
-    // Create serialized version of the message
-    ros::SerializedMessage serialized_msg = ros::serialization::serializeMessage(msg);
+    const auto expectedJson = R"({"data":null})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
 
-    ros_babel_fish::BabelFishMessage bfMsg;
-    bfMsg.morph(md5, datatype, definition);
+TYPED_TEST(JSONTester, CanConvertChannelFloat32ToJson)
+{
+    ros_babel_fish::BabelFish fish;
+    sensor_msgs::ChannelFloat32 msg;
+    fillMessage(msg);
+    auto bfMsg = serializeMessage(fish, msg);
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
+    const auto expectedJson = R"({"name":"channel name","values":[0.0,1.0,2.0,3.0,4.0]})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
 
     ros_babel_fish::BabelFish fish;
     fish.descriptionProvider()->getMessageDescription(bfMsg);
@@ -921,6 +1017,18 @@ TYPED_TEST(JSONTester, CanConvertFloat64NaNToJson)
     const std::string json = this->parser.toJsonString(fish, bfMsg);
 
     const auto expectedJson = R"({"data":null})";
+TYPED_TEST(JSONTester, CanConvertChannelFloat32WithNaNAndInfinityToJson)
+{
+    ros_babel_fish::BabelFish fish;
+    sensor_msgs::ChannelFloat32 msg;
+    msg.name = "channel name";
+    msg.values.push_back(1.0);
+    msg.values.push_back(std::numeric_limits<double>::quiet_NaN());
+    msg.values.push_back(std::numeric_limits<double>::infinity());
+    auto bfMsg = serializeMessage(fish, msg);
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
+
+    const auto expectedJson = R"({"name":"channel name","values":[1.0, null, null]})";
     const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
     EXPECT_EQ(json, expectedOutput);
 }

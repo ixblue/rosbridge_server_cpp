@@ -29,11 +29,27 @@ void fillArray(const nlohmann::json& jsonArray,
     {
         if(msgArray.isFixedSize())
         {
-            msgArray.assign(i, jsonArray[i]);
+            try
+            {
+                msgArray.assign(i, jsonArray[i]);
+            }
+            catch(const nlohmann::detail::type_error& e)
+            {
+                (void)e;
+                msgArray.assign(i, std::numeric_limits<T>::quiet_NaN());
+            }
         }
         else
         {
-            msgArray.push_back(jsonArray[i]);
+            try
+            {
+                msgArray.push_back(jsonArray[i]);
+            }
+            catch(const nlohmann::detail::type_error& e)
+            {
+                (void)e;
+                msgArray.push_back(std::numeric_limits<T>::quiet_NaN());
+            }
         }
     }
 }

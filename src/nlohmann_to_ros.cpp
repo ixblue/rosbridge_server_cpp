@@ -163,8 +163,28 @@ void fillMessageFromJson(const nlohmann::json& json,
         case ros_babel_fish::MessageTypes::Int16: val = m.value().get<int16_t>(); break;
         case ros_babel_fish::MessageTypes::Int32: val = m.value().get<int32_t>(); break;
         case ros_babel_fish::MessageTypes::Int64: val = m.value().get<int64_t>(); break;
-        case ros_babel_fish::MessageTypes::Float32: val = m.value().get<float>(); break;
-        case ros_babel_fish::MessageTypes::Float64: val = m.value().get<double>(); break;
+        case ros_babel_fish::MessageTypes::Float32:
+            try
+            {
+                val = m.value().get<float>();
+            }
+            catch(const nlohmann::detail::type_error& e)
+            {
+                (void)e;
+                val = std::numeric_limits<float>::quiet_NaN();
+            }
+            break;
+        case ros_babel_fish::MessageTypes::Float64:
+            try
+            {
+                val = m.value().get<double>();
+            }
+            catch(const nlohmann::detail::type_error& e)
+            {
+                (void)e;
+                val = std::numeric_limits<double>::quiet_NaN();
+            }
+            break;
         case ros_babel_fish::MessageTypes::Time: {
             ros::Time time;
             time.sec = m.value()["secs"].get<uint32_t>();
