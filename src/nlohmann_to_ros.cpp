@@ -44,8 +44,8 @@ void fillArray<ros::Duration>(const nlohmann::json& jsonArray,
     for(size_t i = 0; i < jsonArray.size(); ++i)
     {
         ros::Duration time;
-        time.sec = jsonArray[i]["secs"].get<uint32_t>();
-        time.nsec = jsonArray[i]["nsecs"].get<uint32_t>();
+        time.sec = jsonArray[i]["secs"].get<int32_t>();
+        time.nsec = jsonArray[i]["nsecs"].get<int32_t>();
         if(msgArray.isFixedSize())
         {
             msgArray.assign(i, time);
@@ -193,9 +193,9 @@ void fillMessageFromJson(const nlohmann::json& json,
             break;
         }
         case ros_babel_fish::MessageTypes::Duration: {
-            ros::Time time;
-            time.sec = m.value()["secs"].get<uint32_t>();
-            time.nsec = m.value()["nsecs"].get<uint32_t>();
+            ros::Duration time;
+            time.sec = m.value()["secs"].get<int32_t>();
+            time.nsec = m.value()["nsecs"].get<int32_t>();
             val = time;
             break;
         }

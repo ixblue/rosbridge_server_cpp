@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <limits>
 
 #include <gtest/gtest.h>
@@ -11,8 +12,10 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/ChannelFloat32.h>
+#include <sensor_msgs/CompressedImage.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/NavSatFix.h>
+#include <std_msgs/Duration.h>
 #include <std_msgs/Float64.h>
 #include <std_msgs/String.h>
 
@@ -155,18 +158,26 @@ void fillMessage(sensor_msgs::Image& m)
     m.is_bigendian = 0;
     m.step = m.width * 3;
     m.data.resize(m.width * m.height * 3);
-    uint8_t i = 0;
-    for(auto& pixel : m.data)
-    {
-        pixel = i++;
-    }
+    std::iota(m.data.begin(), m.data.end(), 0);
 }
 
-void fillMessage(sensor_msgs::ChannelFloat32& msg)
+void fillMessage(sensor_msgs::CompressedImage& m)
 {
-    msg.name = "channel name";
-    msg.values.resize(5);
-    std::iota(msg.values.begin(), msg.values.end(), 0);
+    m.header.stamp.sec = 123;
+    m.header.stamp.nsec = 456;
+    m.header.frame_id = "frame_id";
+    m.header.seq = 123;
+
+    m.format = "jpeg";
+    m.data.resize(10);
+    std::iota(m.data.begin(), m.data.end(), 0);
+}
+
+void fillMessage(sensor_msgs::ChannelFloat32& m)
+{
+    m.name = "channel name";
+    m.values.resize(5);
+    std::iota(m.values.begin(), m.values.end(), 0);
 }
 
 template<typename T>
@@ -660,6 +671,51 @@ TYPED_TEST(JSONTester, CanFillImageFromJSON)
     }
 }
 
+TYPED_TEST(JSONTester, CanFillCompressedImageFromJSON)
+{
+    const auto jsonData = R"({
+        "header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},
+        "format":"jpeg",
+        "data":[0,1,2,3,4,5,6,7,8,9]
+    })";
+
+    ros_babel_fish::BabelFish fish;
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
+                        fish, "sensor_msgs/CompressedImage", g_rosTime, jsonData));
+
+    sensor_msgs::CompressedImage expectedMsg;
+    fillMessage(expectedMsg);
+    ros::SerializedMessage serializedExpectedMsg =
+        ros::serialization::serializeMessage(expectedMsg);
+
+    // Compare ROS encoded message
+    ASSERT_EQ(rosMsg->size(), serializedExpectedMsg.num_bytes - 4);
+    EXPECT_EQ(std::memcmp(rosMsg->buffer(), serializedExpectedMsg.message_start,
+                          rosMsg->size()),
+              0);
+
+    // Compare values
+    ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+    EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(),
+              expectedMsg.header.frame_id);
+    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), expectedMsg.header.seq);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec,
+              expectedMsg.header.stamp.sec);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec,
+              expectedMsg.header.stamp.nsec);
+    EXPECT_EQ(compound["format"].value<std::string>(), expectedMsg.format);
+    auto& base = compound["data"].as<ros_babel_fish::ArrayMessageBase>();
+    auto& array = base.as<ros_babel_fish::ArrayMessage<uint8_t>>();
+    ASSERT_EQ(array.length(), expectedMsg.data.size());
+    for(size_t i = 0; i < array.length(); ++i)
+    {
+        EXPECT_EQ(array[i], expectedMsg.data[i]);
+    }
+}
+
 TYPED_TEST(JSONTester, CanFillOdometryFromJson)
 {
     const auto jsonData = R"({
@@ -911,6 +967,33 @@ TYPED_TEST(JSONTester, CanFillChannelFloat32WithNullFromJson)
     }
 }
 
+TYPED_TEST(JSONTester, CanFillNegativeDurationFromJson)
+{
+    const auto jsonData = R"({"data":{"secs":-15,"nsecs":123}})";
+
+    ros_babel_fish::BabelFish fish;
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(fish, "std_msgs/Duration",
+                                                            g_rosTime, jsonData));
+
+    std_msgs::Duration expectedMsg;
+    expectedMsg.data = ros::Duration{-15, 123};
+    ros::SerializedMessage serializedExpectedMsg =
+        ros::serialization::serializeMessage(expectedMsg);
+
+    // Compare ROS encoded message
+    ASSERT_EQ(rosMsg->size(), serializedExpectedMsg.num_bytes - 4);
+    EXPECT_EQ(std::memcmp(rosMsg->buffer(), serializedExpectedMsg.message_start,
+                          rosMsg->size()),
+              0);
+
+    ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+    EXPECT_EQ(compound["data"].value<ros::Duration>().sec, expectedMsg.data.sec);
+    EXPECT_EQ(compound["data"].value<ros::Duration>().nsec, expectedMsg.data.nsec);
+}
+
 /////////////////
 /// ROS to JSON
 /////////////////
@@ -988,6 +1071,18 @@ TYPED_TEST(JSONTester, CanConvertImageToJson)
     const std::string json = this->parser.toJsonString(fish, bfMsg);
     const auto expectedJson =
         R"({"header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},"height":3,"width":2,"encoding":"bgr8","is_bigendian":0,"step":6,"data":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
+TYPED_TEST(JSONTester, CanConvertCompressedImageToJson)
+{
+    ros_babel_fish::BabelFish fish;
+    sensor_msgs::CompressedImage msg;
+    fillMessage(msg);
+    auto bfMsg = serializeMessage(fish, msg);
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
+    const auto expectedJson =
+        R"({"header":{"seq":123,"stamp":{"secs":123,"nsecs":456},"frame_id":"frame_id"},"format":"jpeg","data":[0,1,2,3,4,5,6,7,8,9]})";
     const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
     EXPECT_EQ(json, expectedOutput);
 }
