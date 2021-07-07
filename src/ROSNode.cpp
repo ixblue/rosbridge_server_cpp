@@ -72,6 +72,46 @@ void ROSNode::start()
     publishStats();
 }
 
+std::tuple<std::string, std::vector<uint8_t>, std::vector<uint8_t>>
+ROSNode::encodeToWireFormat(ros_babel_fish::BabelFish& fish,
+                            const ros::Time& receivedTime, const std::string& topic,
+                            const ros_babel_fish::BabelFishMessage::ConstPtr& msg,
+                            bool toJson, bool toCbor, bool toCborRaw)
+{
+    std::string jsonStr;
+    std::vector<uint8_t> cborVect;
+    std::vector<uint8_t> cborRawVect;
+
+    nlohmann::json json{{"op", "publish"}, {"topic", topic}};
+    auto msgJson = ros_nlohmann_converter::toJson(fish, *msg);
+
+    if(toJson || toCbor)
+    {
+        auto j = json;
+        j["msg"] = msgJson;
+        if(toCbor)
+        {
+            cborVect = nlohmann::json::to_cbor(j);
+        }
+        if(toJson)
+        {
+            jsonStr = j.dump();
+        }
+    }
+
+    if(toCborRaw)
+    {
+        auto j = json;
+        std::vector<uint8_t> data(msg->buffer(), msg->buffer() + msg->size());
+        nlohmann::json::binary_t jsonBin{data};
+        j["msg"] = {
+            {"secs", receivedTime.sec}, {"nsecs", receivedTime.nsec}, {"bytes", jsonBin}};
+        cborRawVect = nlohmann::json::to_cbor(j);
+    }
+
+    return {jsonStr, cborVect, cborRawVect};
+}
+
 void ROSNode::advertise(WSClient* client, const rbp::AdvertiseArgs& args)
 {
     if(const auto it = m_pubs.find(args.topic); it != m_pubs.end())
@@ -210,6 +250,19 @@ void ROSNode::subscribe(WSClient* client, const rbp::SubscribeArgs& args)
         {
             ROS_DEBUG_STREAM("Add a new client subscribed on topic " << args.topic);
             it->second.clients.push_back(getNewClient());
+        }
+
+        // If the topic is latched, send the last message directly to the new client
+        if(it->second.isLatched)
+        {
+            const auto& client = it->second.clients.back();
+            const bool toJson = client->encoding == rbp::Encoding::JSON;
+            const bool toCbor = client->encoding == rbp::Encoding::CBOR;
+            const bool toCborRaw = client->encoding == rbp::Encoding::CBOR_RAW;
+            const auto [jsonStr, cborVect, cborRawVect] =
+                encodeToWireFormat(*m_fish, it->second.lastMessageReceivedTime, it->first,
+                                   it->second.lastMessage, toJson, toCbor, toCborRaw);
+            sendToClient(client.get(), jsonStr, cborVect, cborRawVect);
         }
     }
     else
@@ -531,53 +584,29 @@ void ROSNode::handleROSMessage(const std::string& topic,
     {
         auto receivedTime = ros::Time::now();
         ROS_DEBUG_STREAM_ONCE("Received ROS msg on topic " << topic);
-        ROS_DEBUG_STREAM_NAMED("topic", "Handle ROS msg on topic " << topic);
+        ROS_DEBUG_STREAM_NAMED("topic", "Handle ROS msg on topic "
+                                            << topic << " latched: " << msg->isLatched());
+        const bool toJson = m_encodings.count(rbp::Encoding::JSON) > 0;
+        const bool toCbor = m_encodings.count(rbp::Encoding::CBOR) > 0;
+        const bool toCborRaw = m_encodings.count(rbp::Encoding::CBOR_RAW) > 0;
         QElapsedTimer t;
-        t.start();
-        nlohmann::json json{{"op", "publish"}, {"topic", topic}};
-        auto msgJson = ros_nlohmann_converter::toJson(*m_fish, *msg);
-        ROS_DEBUG_STREAM_NAMED("topic", "Converted ROS message on topic "
-                                            << topic << " to JSON struct in "
-                                            << t.nsecsElapsed() / 1000 << " us");
-        t.start();
+        auto [jsonStr, cborVect, cborRawVect] = encodeToWireFormat(
+            *m_fish, receivedTime, topic, msg, toJson, toCbor, toCborRaw);
 
-        // Encode to json only once
-        std::string jsonStr;
-        std::vector<uint8_t> cborVect;
-        const bool hasJson = m_encodings.count(rbp::Encoding::JSON) > 0;
-        const bool hasCbor = m_encodings.count(rbp::Encoding::CBOR) > 0;
-        if(hasJson || hasCbor)
-        {
-            auto j = json;
-            j["msg"] = msgJson;
-            if(hasCbor)
-            {
-                cborVect = nlohmann::json::to_cbor(j);
-            }
-            if(hasJson)
-            {
-                jsonStr = j.dump();
-            }
-        }
-
-        std::vector<uint8_t> cborRawVect;
-        if(m_encodings.count(rbp::Encoding::CBOR_RAW) > 0)
-        {
-            auto j = json;
-            std::vector<uint8_t> data(msg->buffer(), msg->buffer() + msg->size());
-            nlohmann::json::binary_t jsonBin{data};
-            j["msg"] = {{"secs", receivedTime.sec},
-                        {"nsecs", receivedTime.nsec},
-                        {"bytes", jsonBin}};
-            cborRawVect = nlohmann::json::to_cbor(j);
-        }
-
-        ROS_DEBUG_STREAM_NAMED("topic", "Converted JSON struct on topic "
+        ROS_DEBUG_STREAM_NAMED("topic", "Converted ROS msg on topic "
                                             << topic << " to wire format(s) in "
                                             << t.nsecsElapsed() / 1000 << " us");
 
         if(const auto it = m_subs.find(topic); it != m_subs.end())
         {
+            // Store latched msg for a new client
+            if(msg->isLatched())
+            {
+                it->second.isLatched = true;
+                it->second.lastMessage = msg;
+                it->second.lastMessageReceivedTime = receivedTime;
+            }
+
             for(auto& client : it->second.clients)
             {
                 if(client->client->isReady())
@@ -586,19 +615,7 @@ void ROSNode::handleROSMessage(const std::string& topic,
                        (ros::Time::now() - client->lastTimeMsgSent).toSec() >
                            client->throttleRate_ms / 1000.)
                     {
-                        if(client->encoding == rbp::Encoding::CBOR)
-                        {
-                            sendBinaryMsg(client->client, cborVect);
-                        }
-                        else if(client->encoding == rbp::Encoding::CBOR_RAW)
-                        {
-                            sendBinaryMsg(client->client, cborRawVect);
-                        }
-                        else
-                        {
-                            sendMsg(client->client, jsonStr);
-                        }
-                        client->lastTimeMsgSent = ros::Time::now();
+                        sendToClient(client.get(), jsonStr, cborVect, cborRawVect);
                     }
                 }
                 else
@@ -681,6 +698,25 @@ void ROSNode::sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binary
     auto data =
         QByteArray(reinterpret_cast<const char*>(binaryMsg.data()), binaryMsg.size());
     QMetaObject::invokeMethod(client, "sendBinaryMsg", Q_ARG(QByteArray, data));
+}
+
+void ROSNode::sendToClient(SubscriberClient* client, const std::string& jsonStr,
+                           const std::vector<uint8_t>& cborVect,
+                           const std::vector<uint8_t>& cborRawVect)
+{
+    if(client->encoding == rbp::Encoding::CBOR)
+    {
+        sendBinaryMsg(client->client, cborVect);
+    }
+    else if(client->encoding == rbp::Encoding::CBOR_RAW)
+    {
+        sendBinaryMsg(client->client, cborRawVect);
+    }
+    else
+    {
+        sendMsg(client->client, jsonStr);
+    }
+    client->lastTimeMsgSent = ros::Time::now();
 }
 
 void ROSNode::publishStats()

@@ -5,6 +5,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <QObject>
@@ -45,6 +46,10 @@ struct ROSBridgeSubscriber
     ros::Subscriber sub;
     std::string type;
     std::vector<std::shared_ptr<SubscriberClient>> clients;
+    // Store last message if latched for new subscribers
+    bool isLatched = false;
+    ros_babel_fish::BabelFishMessage::ConstPtr lastMessage;
+    ros::Time lastMessageReceivedTime;
 };
 
 class ROSNode : public QObject
@@ -54,6 +59,12 @@ public:
     explicit ROSNode(QObject* parent = nullptr);
     ~ROSNode();
     void start();
+
+    static std::tuple<std::string, std::vector<uint8_t>, std::vector<uint8_t>>
+    encodeToWireFormat(ros_babel_fish::BabelFish& fish, const ros::Time& receivedTime,
+                       const std::string& topic,
+                       const ros_babel_fish::BabelFishMessage::ConstPtr& msg, bool toJson,
+                       bool toCbor, bool toCborRaw);
 
 public slots:
     void onWSMessage(const QString& message);
@@ -99,6 +110,9 @@ private:
                     const std::string& msg, const std::string& id = std::string{});
     void sendMsg(WSClient* client, const std::string& msg);
     void sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg);
+    void sendToClient(SubscriberClient* client, const std::string& jsonStr,
+                      const std::vector<uint8_t>& cborVect,
+                      const std::vector<uint8_t>& cborRawVect);
 
     void publishStats();
 

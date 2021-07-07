@@ -9,6 +9,7 @@ class BridgeTester : public QObject
 private slots:
     void canSubscribeToATopicAndSendJson();
     void twoClientsCanSubscribeToTheSameTopic();
+    void twoClientsCanSubscribeToTheSameLatchedTopic();
     void canSubscribeToATopicWithoutThrottle();
     void canSubscribeToATopicWithThrottleRateBurst();
     void canSubscribeToATopicWithThrottleRate();

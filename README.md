@@ -14,6 +14,7 @@ Pas implémenté par rapport à la version Python :
 - service server
 - Autres transports que Websocket (TCP, UDP)
 - Mode BSON only
+- Regex pour n'autoriser que certains topics et services
 
 ## Détails d'implémentation
 

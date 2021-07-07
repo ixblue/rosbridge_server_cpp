@@ -104,8 +104,64 @@ void BridgeTester::twoClientsCanSubscribeToTheSameTopic()
     const auto json1Str =
         nlohmann::json::parse(client1->m_lastSentTextMsgs.front().toStdString()).dump();
     const auto json2Str =
+        nlohmann::json::parse(client2->m_lastSentTextMsgs.front().toStdString()).dump();
+    QCOMPARE(json1Str, expectedJsonStr);
+    QCOMPARE(json2Str, expectedJsonStr);
+}
+
+void BridgeTester::twoClientsCanSubscribeToTheSameLatchedTopic()
+{
+    ros::NodeHandle nh;
+    ros::Publisher pub = nh.advertise<std_msgs::String>("/hello_latched", 10, true);
+
+    // Create on heap because will call deleteLater in destructor
+    auto client1 = new MockWSClient();
+    auto client2 = new MockWSClient();
+    ROSNode node;
+    connect(client1, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+    connect(client2, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+
+    // Publish the latched topic
+    const auto str = "hello";
+    {
+        std_msgs::String msg;
+        msg.data = str;
+        pub.publish(msg);
+    }
+
+    QTest::qWait(20);
+
+    // First client subscribes
+    client1->receivedTextMessage(
+        R"({"op":"subscribe","topic":"/hello_latched","type":"std_msgs/String"})");
+
+    QVERIFY(client1->m_lastSentTextMsgs.empty());
+    QVERIFY(client2->m_lastSentTextMsgs.empty());
+
+    QTest::qWait(20);
+
+    QCOMPARE(client1->m_lastSentTextMsgs.size(), 1UL);
+    QVERIFY(client2->m_lastSentTextMsgs.empty());
+
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJsonStr =
+        R"({"op":"publish","topic":"/hello_latched","msg":{"data":"hello"}})"_json.dump();
+
+    const auto json1Str =
         nlohmann::json::parse(client1->m_lastSentTextMsgs.front().toStdString()).dump();
     QCOMPARE(json1Str, expectedJsonStr);
+
+    // Then client 2 subscribes
+    client2->receivedTextMessage(
+        R"({"op":"subscribe","topic":"/hello_latched","type":"std_msgs/String"})");
+
+    QTest::qWait(20);
+
+    // The message is latched and must be received by the second client
+    QCOMPARE(client2->m_lastSentTextMsgs.size(), 1UL);
+
+    const auto json2Str =
+        nlohmann::json::parse(client2->m_lastSentTextMsgs.front().toStdString()).dump();
     QCOMPARE(json2Str, expectedJsonStr);
 }
 
