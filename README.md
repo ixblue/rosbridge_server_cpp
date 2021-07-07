@@ -6,7 +6,7 @@ Il utilise Qt pour l'implémentation Websocket et donc dépend de `libqt5websock
 
 Les "compressions" **JSON**, **CBOR** et **CBOR-RAW** sont supportés mais pas la compression **PNG**.
 
-Pas implémenté par rapport à la version Python :
+### Pas implémenté par rapport à la version Python
 
 - compression PNG
 - paquets fragmentés
@@ -15,6 +15,12 @@ Pas implémenté par rapport à la version Python :
 - Autres transports que Websocket (TCP, UDP)
 - Mode BSON only
 - Regex pour n'autoriser que certains topics et services
+
+### Différences avec la version Python
+
+En plus des fonctionnalités non implémentées, quelques choix de design diffèrent :
+
+- Le paramètre `type` de la requête `call_service` est obligatoire. La version Python l'ignore et recherche le type avec l'API rosmaster.
 
 ## Détails d'implémentation
 

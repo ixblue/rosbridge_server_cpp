@@ -911,6 +911,11 @@ void ROSNode::callServiceHandler(WSClient* client, const nlohmann::json& json,
     {
         args.serviceType = it->get<std::string>();
     }
+    else
+    {
+        ROS_WARN_STREAM("Received 'call_service' msg without required 'type' key");
+        return;
+    }
 
     if(const auto it = json.find("fragment_size"); it != json.end())
     {
