@@ -161,6 +161,12 @@ install(TARGETS ${PROJECT_NAME}_node ${PROJECT_NAME}
 #   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 # )
 
+# launch files
+install(DIRECTORY
+  launch
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
+
 #############
 ## Testing ##
 #############
