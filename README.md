@@ -71,3 +71,21 @@ Topics hérités du nœud Python :
 
 - `client_count` (*std_msgs/Int32*) : Nombre de clients connectés, latché et mis à jour à chaque changement du nombre de clients.
 - `connected_clients` (rosbridge_msgs/ConnectedClients**) : Information sur les clients actuellement connectés, latché et mis à jour à chaque changement du nombre de clients.
+
+## Tests
+
+Pour tester le fonctionnement avec la boucle d'événements Qt, Qt Test est utilisé.
+Mais catkin ne sait utiliser que `gtest` avec `catkin_add_gtest` et `add_rostest_gtest` et donne donc des arguments spécifiques à googletest pour informer du nom du fichier xml de sortie.
+Nous modifions donc ces arguments pour les convertir en arguments compris par QTest.
+Mais, dans le fichier XML généré par QTest, les `testcase` n'ont pas de champ `time` et rosunit (< 1.15.8) gère mal ce cas, ce qui le fait planter et donc échouer les tests.
+
+En attendant d'utiliser une version corrigée de `rosunit`, il est possible de récupérer la dernière version pour utilisation dans Jenkins :
+
+```groovy
+// Install latest version of rosunit to handle p_rosbridge_server_cpp Qt tests
+dir('tmp')
+{
+    sh 'git clone --depth=1 https://github.com/ros/ros'
+    sh 'cp -r ros/tools/rosunit ../workspace/src'
+}
+```
