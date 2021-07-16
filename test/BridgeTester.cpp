@@ -536,7 +536,7 @@ void BridgeTester::canPublishOnALatchedTopicAndSubscribeLater()
             hasReceivedMsg = true;
         });
 
-    QTest::qWait(80);
+    QTest::qWait(120);
 
     // Message should be received because topic is latched
     QVERIFY(hasReceivedMsg);
