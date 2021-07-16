@@ -11,6 +11,8 @@
 
 #include "BridgeTester.h"
 
+constexpr auto PUBLISH_WAIT_TIME_MS = 120;
+
 class MockWSClient : public WSClient
 {
     Q_OBJECT
@@ -52,7 +54,7 @@ void BridgeTester::canSubscribeToATopicAndSendJson()
         pub.publish(msg);
     }
 
-    QTest::qWait(20);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
     QVERIFY(client->m_lastSentBinaryMsg.isEmpty());
@@ -93,7 +95,7 @@ void BridgeTester::twoClientsCanSubscribeToTheSameTopic()
         pub.publish(msg);
     }
 
-    QTest::qWait(20);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     QCOMPARE(client1->m_lastSentTextMsgs.size(), 1UL);
     QCOMPARE(client2->m_lastSentTextMsgs.size(), 1UL);
@@ -129,7 +131,7 @@ void BridgeTester::twoClientsCanSubscribeToTheSameLatchedTopic()
         pub.publish(msg);
     }
 
-    QTest::qWait(20);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     // First client subscribes
     client1->receivedTextMessage(
@@ -190,7 +192,7 @@ void BridgeTester::canSubscribeToATopicWithoutThrottle()
         pub.publish(msg);
     }
 
-    QTest::qWait(20);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     QCOMPARE(client->m_lastSentTextMsgs.size(), 20UL);
 
@@ -229,7 +231,7 @@ void BridgeTester::canSubscribeToATopicWithThrottleRateBurst()
         pub.publish(msg);
     }
 
-    QTest::qWait(20);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
 
@@ -269,7 +271,7 @@ void BridgeTester::canSubscribeToATopicWithThrottleRate()
         QTest::qWait(20);
     }
 
-    QTest::qWait(20);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     // Only 2 should be received
     QCOMPARE(client->m_lastSentTextMsgs.size(), 2UL);
@@ -308,7 +310,7 @@ void BridgeTester::canSubscribeToATopicAndSendCBOR()
         pub.publish(msg);
     }
 
-    QTest::qWait(20);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     QVERIFY(client->m_lastSentTextMsgs.empty());
     QVERIFY(!client->m_lastSentBinaryMsg.isEmpty());
@@ -345,7 +347,7 @@ void BridgeTester::canSubscribeThenUnsubscribeToATopic()
         pub.publish(msg);
     }
 
-    QTest::qWait(20);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
     QVERIFY(client->m_lastSentBinaryMsg.isEmpty());
@@ -371,7 +373,7 @@ void BridgeTester::canSubscribeThenUnsubscribeToATopic()
         pub.publish(msg);
     }
 
-    QTest::qWait(20);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     // We should not have received the message
     QVERIFY(client->m_lastSentTextMsgs.empty());
@@ -400,7 +402,7 @@ void BridgeTester::canPublishOnATopicJSON()
     client->receivedTextMessage(
         R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})");
 
-    QTest::qWait(20);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     QVERIFY(hasReceivedMsg);
     QCOMPARE(receivedMsg, std::string{"hello"});
@@ -448,7 +450,7 @@ void BridgeTester::canAdvertiseAndUnadvertiseATopic()
     client->receivedTextMessage(
         R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})");
 
-    QTest::qWait(20);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     QVERIFY(hasReceivedMsg);
     QCOMPARE(receivedMsg, std::string{"hello"});
@@ -465,7 +467,7 @@ void BridgeTester::canAdvertiseAndUnadvertiseATopic()
     client->receivedTextMessage(
         R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})");
 
-    QTest::qWait(20);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     QVERIFY(!hasReceivedMsg);
     QVERIFY(receivedMsg.empty());
@@ -536,7 +538,7 @@ void BridgeTester::canPublishOnALatchedTopicAndSubscribeLater()
             hasReceivedMsg = true;
         });
 
-    QTest::qWait(120);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     // Message should be received because topic is latched
     QVERIFY(hasReceivedMsg);
@@ -571,7 +573,7 @@ void BridgeTester::cannotPublishOnANotLatchedTopicAndSubscribeLater()
             hasReceivedMsg = true;
         });
 
-    QTest::qWait(80);
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     // Message should not be received because subscribed after publish on a topic not
     // latched
@@ -728,12 +730,6 @@ int main(int argc, char* argv[])
     std::vector<std::string> newStringArgs;
     newStringArgs.reserve(argc);
     std::copy(argv, argv + argc, std::back_inserter(newStringArgs));
-    /*
-    for(size_t i = 0; i < static_cast<size_t>(argc); ++i)
-    {
-        newStringArgs.emplace_back(argv[i]);
-    }
-    */
     const std::string gtestArg{"--gtest_output=xml:"};
     auto it = std::find_if(newStringArgs.begin(), newStringArgs.end(),
                            [&gtestArg](const auto& elem) {
