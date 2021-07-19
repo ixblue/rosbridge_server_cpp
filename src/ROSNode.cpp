@@ -394,10 +394,33 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
                 });
 
         connect(serviceClient, &ServiceCallerWithTimeout::error, this,
-                [this, client, serviceName = args.serviceName](const QString& errorMsg) {
+                [this, id = args.id,compression = args.compression, client, serviceName = args.serviceName](const QString& errorMsg) {
+
                     if(client != nullptr)
                     {
-                        // TODO send status error or service_response?
+                        nlohmann::json json;
+                        json["op"] = "service_response";
+                        json["service"] = serviceName;
+                        json["values"] = {errorMsg.toStdString()};
+                        if(!id.empty())
+                        {
+                            json["id"] = id;
+                        }
+                        json["result"] = false;
+
+                        // Encode to json only once
+                        if(compression == "cbor-raw")
+                        {
+                            sendBinaryMsg(client, nlohmann::json::to_cbor(json));
+                        }
+                        else
+                        {
+                            if(compression == "cbor")
+                            {
+                                sendBinaryMsg(client, nlohmann::json::to_cbor(json));
+                            }
+                            sendMsg(client, json.dump());
+                        }
                         sendStatus(client, rbp::StatusLevel::Error,
                                    errorMsg.toStdString());
                     }
@@ -426,6 +449,31 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
         ss << "Service call on unknown service type: '" << args.serviceType
            << "': " << e.what();
         sendStatus(client, rbp::StatusLevel::Error, ss.str());
+
+        nlohmann::json json;
+        json["op"] = "service_response";
+        json["service"] = args.serviceName;
+        json["values"] = {"Unknown service type : " + args.serviceType};
+        if(!args.id.empty())
+        {
+            json["id"] = args.id;
+        }
+        json["result"] = false;
+
+        // Encode to json only once
+        if(args.compression == "cbor-raw")
+        {
+            sendBinaryMsg(client, nlohmann::json::to_cbor(json));
+        }
+        else
+        {
+            if(args.compression == "cbor")
+            {
+                sendBinaryMsg(client, nlohmann::json::to_cbor(json));
+            }
+            sendMsg(client, json.dump());
+        }
+
         return;
     }
 }
