@@ -26,7 +26,7 @@ struct ROSBridgePublisher
 {
     std::string type;
     ros::Publisher pub;
-    std::set<WSClient*> clients;
+    std::set<const WSClient*> clients;
 };
 
 struct SubscriberClient
@@ -38,7 +38,9 @@ struct SubscriberClient
     std::string compression;
     rosbridge_protocol::Encoding encoding = rosbridge_protocol::Encoding::JSON;
     ros::Time lastTimeMsgSent;
-    // TODO circular buffer
+
+    SubscriberClient(WSClient* wsClient, const rosbridge_protocol::SubscribeArgs& args);
+    void setEncoding(const std::string& compression);
 };
 
 struct ROSBridgeSubscriber
@@ -57,7 +59,6 @@ class ROSNode : public QObject
     Q_OBJECT
 public:
     explicit ROSNode(QObject* parent = nullptr);
-    ~ROSNode();
     void start();
 
     static std::tuple<std::string, std::vector<uint8_t>, std::vector<uint8_t>>
@@ -65,6 +66,11 @@ public:
                        const std::string& topic,
                        const ros_babel_fish::BabelFishMessage::ConstPtr& msg, bool toJson,
                        bool toCbor, bool toCborRaw);
+    static std::tuple<std::string, std::vector<uint8_t>, std::vector<uint8_t>>
+    encodeToWireFormat(ros_babel_fish::BabelFish& fish, const ros::Time& receivedTime,
+                       const std::string& topic,
+                       const ros_babel_fish::BabelFishMessage::ConstPtr& msg,
+                       rosbridge_protocol::Encoding encoding);
 
 public slots:
     void onWSMessage(const QString& message);
@@ -113,10 +119,14 @@ private:
     void sendToClient(SubscriberClient* client, const std::string& jsonStr,
                       const std::vector<uint8_t>& cborVect,
                       const std::vector<uint8_t>& cborRawVect);
+    void addNewSubscriberClient(WSClient* client,
+                                const rosbridge_protocol::SubscribeArgs& args);
+    void udapteSubscriberClient(SubscriberClient& c,
+                                const rosbridge_protocol::SubscribeArgs& args);
 
     void publishStats();
 
-    ros::NodeHandle m_nhPrivate;
+    ros::NodeHandle m_nhPrivate{"~"};
     ros::NodeHandle m_nhNs;
     ros::Publisher m_clientsCountPub;
     ros::Publisher m_connectedClientsPub;
@@ -124,7 +134,8 @@ private:
     std::map<std::string, ROSBridgeSubscriber> m_subs;
     std::shared_ptr<ros_babel_fish::BabelFish> m_fish;
     std::set<rosbridge_protocol::Encoding> m_encodings;
-    QWebSocketServer m_wsServer;
+    QWebSocketServer m_wsServer{QStringLiteral("rosbridge server"),
+                                QWebSocketServer::NonSecureMode};
     std::vector<std::shared_ptr<WSClient>> m_clients;
     rosbridge_protocol::StatusLevel m_currentStatusLevel =
         rosbridge_protocol::StatusLevel::Error;

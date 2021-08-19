@@ -134,17 +134,17 @@ void fillMessageFromJson(const nlohmann::json& json,
             }
             break;
         case ros_babel_fish::MessageTypes::Time: {
-            ros::Time time;
-            time.sec = m.value()["secs"].get<uint32_t>();
-            time.nsec = m.value()["nsecs"].get<uint32_t>();
-            val = time;
+            ros::Time rosTime;
+            rosTime.sec = m.value()["secs"].get<uint32_t>();
+            rosTime.nsec = m.value()["nsecs"].get<uint32_t>();
+            val = rosTime;
             break;
         }
         case ros_babel_fish::MessageTypes::Duration: {
-            ros::Duration time;
-            time.sec = m.value()["secs"].get<int32_t>();
-            time.nsec = m.value()["nsecs"].get<int32_t>();
-            val = time;
+            ros::Duration duration;
+            duration.sec = m.value()["secs"].get<int32_t>();
+            duration.nsec = m.value()["nsecs"].get<int32_t>();
+            val = duration;
             break;
         }
         case ros_babel_fish::MessageTypes::String:
@@ -156,7 +156,7 @@ void fillMessageFromJson(const nlohmann::json& json,
 
 ros_babel_fish::BabelFishMessage::Ptr createMsg(ros_babel_fish::BabelFish& fish,
                                                 const std::string& type,
-                                                const ros::Time& time,
+                                                const ros::Time& rosTime,
                                                 const nlohmann::json& json)
 {
     ros_babel_fish::Message::Ptr message = fish.createMessage(type);
@@ -170,7 +170,7 @@ ros_babel_fish::BabelFishMessage::Ptr createMsg(ros_babel_fish::BabelFish& fish,
         if(const auto it = json.find("header");
            it == json.end() || !it->contains("stamp"))
         {
-            compound["header"]["stamp"] = time;
+            compound["header"]["stamp"] = rosTime;
         }
     }
 

@@ -1,5 +1,6 @@
 #include <sstream>
 
+#include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QMetaObject>
 #include <QWebSocket>
@@ -18,8 +19,7 @@
 namespace rbp = rosbridge_protocol;
 
 ROSNode::ROSNode(QObject* parent)
-    : QObject(parent), m_nhPrivate{"~"}, m_wsServer{QStringLiteral("rosbridge server"),
-                                                    QWebSocketServer::NonSecureMode},
+    : QObject(parent), m_nhPrivate{"~"},
       m_opHandlers{
           {"advertise", [this](WSClient* c, const auto& j,
                                const auto& id) { advertiseHandler(c, j, id); }},
@@ -52,18 +52,13 @@ ROSNode::ROSNode(QObject* parent)
     m_fish = std::make_shared<ros_babel_fish::BabelFish>();
 }
 
-ROSNode::~ROSNode()
-{
-    ROS_DEBUG_STREAM("~ROSNode");
-}
-
 void ROSNode::start()
 {
-    if(!m_wsServer.listen(QHostAddress::Any, m_wsPort))
+    if(!m_wsServer.listen(QHostAddress::Any, static_cast<uint16_t>(m_wsPort)))
     {
         ROS_FATAL_STREAM("Failed to start WS server on port "
                          << m_wsPort << ": " << m_wsServer.errorString().toStdString());
-        exit(1);
+        QCoreApplication::exit(1);
     }
 
     ROS_INFO_STREAM("Start WS on port: " << m_wsServer.serverPort());
@@ -205,97 +200,68 @@ void ROSNode::publish(WSClient* client, const rbp::PublishArgs& args)
     }
 }
 
+void ROSNode::udapteSubscriberClient(SubscriberClient& c, const rbp::SubscribeArgs& args)
+{
+    if(c.compression != args.compression)
+    {
+        std::ostringstream ss;
+        ss << "Client is subscribing once more on topic " << args.topic
+           << " but with compression " << args.compression
+           << " while already subscribed to this topic but with compression "
+           << c.compression << " switching to compression " << args.compression;
+        sendStatus(c.client, rbp::StatusLevel::Warning, ss.str());
+    }
+    else
+    {
+        ROS_DEBUG_STREAM("Client is subscribing once more on the " << args.topic);
+    }
+
+    c.throttleRate_ms = std::min(c.throttleRate_ms, args.throttleRate);
+    c.fragmentSize = std::min(c.fragmentSize, args.fragmentSize);
+    c.queueSize = std::min(c.queueSize, args.queueSize);
+    c.compression = args.compression;
+    c.setEncoding(args.compression);
+    m_encodings.insert(c.encoding);
+}
+
 void ROSNode::subscribe(WSClient* client, const rbp::SubscribeArgs& args)
 {
-    auto getNewClient = [=]() {
-        auto newSubClient = std::make_shared<SubscriberClient>();
-        newSubClient->client = client;
-        newSubClient->queueSize = args.queueSize;
-        newSubClient->throttleRate_ms = args.throttleRate;
-        newSubClient->fragmentSize = args.fragmentSize;
-        newSubClient->compression = args.compression;
-        // Default = JSON, PNG not implemented
-        if(args.compression == "cbor")
-        {
-            newSubClient->encoding = rbp::Encoding::CBOR;
-        }
-        else if(args.compression == "cbor-raw")
-        {
-            newSubClient->encoding = rbp::Encoding::CBOR_RAW;
-        }
-        else
-        {
-            newSubClient->encoding = rbp::Encoding::JSON;
-        }
-        m_encodings.insert(newSubClient->encoding);
-        return newSubClient;
-    };
-
     if(const auto it = m_subs.find(args.topic); it != m_subs.end())
     {
+        std::shared_ptr<SubscriberClient> subClient;
+
         // topic already subscribed, check if this client already registered
         if(const auto clientIt = std::find_if(
                it->second.clients.begin(), it->second.clients.end(),
                [&client](const auto& clientSub) { return clientSub->client == client; });
            clientIt != it->second.clients.end())
         {
-            ROS_DEBUG_STREAM("Client is subscribing once more on the " << args.topic);
-
-            SubscriberClient& c = *(*clientIt);
-            c.throttleRate_ms = std::min(c.throttleRate_ms, args.throttleRate);
-            c.fragmentSize = std::min(c.fragmentSize, args.fragmentSize);
-            c.queueSize = std::min(c.queueSize, args.queueSize);
+            udapteSubscriberClient(*(*clientIt), args);
+            subClient = *clientIt;
         }
         else
         {
             ROS_DEBUG_STREAM("Add a new client subscribed on topic " << args.topic);
-            it->second.clients.push_back(getNewClient());
+            subClient = std::make_shared<SubscriberClient>(client, args);
+            it->second.clients.push_back(subClient);
+            m_encodings.insert(subClient->encoding);
         }
 
         // If the topic is latched, send the last message directly to the new client
-        if(it->second.isLatched)
+        if(it->second.isLatched && subClient)
         {
-            const auto& client = it->second.clients.back();
-            const bool toJson = client->encoding == rbp::Encoding::JSON;
-            const bool toCbor = client->encoding == rbp::Encoding::CBOR;
-            const bool toCborRaw = client->encoding == rbp::Encoding::CBOR_RAW;
+            const bool toJson = subClient->encoding == rbp::Encoding::JSON;
+            const bool toCbor = subClient->encoding == rbp::Encoding::CBOR;
+            const bool toCborRaw = subClient->encoding == rbp::Encoding::CBOR_RAW;
             const auto [jsonStr, cborVect, cborRawVect] =
                 encodeToWireFormat(*m_fish, it->second.lastMessageReceivedTime, it->first,
                                    it->second.lastMessage, toJson, toCbor, toCborRaw);
-            sendToClient(client.get(), jsonStr, cborVect, cborRawVect);
+            sendToClient(subClient.get(), jsonStr, cborVect, cborRawVect);
         }
     }
     else
     {
-        if(!args.type.empty())
-        {
-            // Try to create a msg to check that we can find it
-            try
-            {
-                const auto dummyMsg = m_fish->createMessage(args.type);
-            }
-            catch(const ros_babel_fish::BabelFishException&)
-            {
-                std::ostringstream ss;
-                ss << "Unknown message type '" << args.type << "'";
-                sendStatus(client, rbp::StatusLevel::Error, ss.str());
-                return;
-            }
-        }
-
-        ROSBridgeSubscriber sub;
-        sub.type = args.type;
-        sub.sub = m_nhPrivate.subscribe<ros_babel_fish::BabelFishMessage>(
-            args.topic, 100,
-            [this,
-             topic = args.topic](const ros_babel_fish::BabelFishMessage::ConstPtr& msg) {
-                handleROSMessage(topic, msg);
-            });
-
-        sub.clients.push_back(getNewClient());
-
-        m_subs.emplace(args.topic, std::move(sub));
-        ROS_DEBUG_STREAM("Subscribe to a new topic " << args.topic);
+        addNewSubscriberClient(client, args);
     }
 }
 
@@ -546,7 +512,7 @@ void ROSNode::onWSBinaryMessage(const QByteArray& message)
 
 void ROSNode::onWSClientDisconnected()
 {
-    auto* client = qobject_cast<WSClient*>(sender());
+    const auto* client = qobject_cast<WSClient*>(sender());
 
     const auto clientName = client->name();
 
@@ -767,6 +733,37 @@ void ROSNode::sendToClient(SubscriberClient* client, const std::string& jsonStr,
     client->lastTimeMsgSent = ros::Time::now();
 }
 
+void ROSNode::addNewSubscriberClient(WSClient* client,
+                                     const rosbridge_protocol::SubscribeArgs& args)
+{
+    // Try to create a msg to check that we can find it
+    try
+    {
+        const auto dummyMsg = m_fish->createMessage(args.type);
+    }
+    catch(const ros_babel_fish::BabelFishException&)
+    {
+        std::ostringstream ss;
+        ss << "Unknown message type '" << args.type << "'";
+        sendStatus(client, rbp::StatusLevel::Error, ss.str());
+        return;
+    }
+
+    ROSBridgeSubscriber sub;
+    sub.type = args.type;
+    sub.sub = m_nhPrivate.subscribe<ros_babel_fish::BabelFishMessage>(
+        args.topic, 100,
+        [this,
+         topic = args.topic](const ros_babel_fish::BabelFishMessage::ConstPtr& msg) {
+            handleROSMessage(topic, msg);
+        });
+
+    sub.clients.push_back(std::make_shared<SubscriberClient>(client, args));
+    m_encodings.insert(sub.clients.back()->encoding);
+    m_subs.emplace(args.topic, std::move(sub));
+    ROS_DEBUG_STREAM("Subscribe to a new topic " << args.topic);
+}
+
 void ROSNode::publishStats()
 {
     ROS_DEBUG("publishStats");
@@ -801,7 +798,8 @@ void ROSNode::advertiseHandler(WSClient* client, const nlohmann::json& json,
     }
     else
     {
-        ROS_WARN_STREAM("Received 'advertise' msg without required 'topic' key");
+        sendStatus(client, rbp::StatusLevel::Error,
+                   "Received 'advertise' msg without required 'topic' key");
         return;
     }
 
@@ -811,7 +809,8 @@ void ROSNode::advertiseHandler(WSClient* client, const nlohmann::json& json,
     }
     else
     {
-        ROS_WARN_STREAM("Received 'advertise' msg without required 'type' key");
+        sendStatus(client, rbp::StatusLevel::Error,
+                   "Received 'advertise' msg without required 'type' key");
         return;
     }
 
@@ -840,7 +839,8 @@ void ROSNode::unadvertiseHandler(WSClient* client, const nlohmann::json& json,
     }
     else
     {
-        ROS_WARN_STREAM("Received 'unadvertise' msg without required 'topic' key");
+        sendStatus(client, rbp::StatusLevel::Error,
+                   "Received 'unadvertise' msg without required 'topic' key");
         return;
     }
 
@@ -859,7 +859,8 @@ void ROSNode::publishHandler(WSClient* client, const nlohmann::json& json,
     }
     else
     {
-        ROS_WARN_STREAM("Received 'publish' msg without required 'topic' key");
+        sendStatus(client, rbp::StatusLevel::Error,
+                   "Received 'publish' msg without required 'topic' key");
         return;
     }
 
@@ -869,7 +870,8 @@ void ROSNode::publishHandler(WSClient* client, const nlohmann::json& json,
     }
     else
     {
-        ROS_WARN_STREAM("Received 'publish' msg without required 'msg' key");
+        sendStatus(client, rbp::StatusLevel::Error,
+                   "Received 'publish' msg without required 'msg' key");
         return;
     }
 
@@ -888,13 +890,20 @@ void ROSNode::subscribeHandler(WSClient* client, const nlohmann::json& json,
     }
     else
     {
-        ROS_WARN_STREAM("Received 'subscribe' msg without required 'topic' key");
+        sendStatus(client, rbp::StatusLevel::Error,
+                   "Received 'subscribe' msg without required 'topic' key");
         return;
     }
 
     if(const auto it = json.find("type"); it != json.end())
     {
         args.type = it->get<std::string>();
+    }
+    else
+    {
+        sendStatus(client, rbp::StatusLevel::Error,
+                   "Received 'subscribe' msg without required 'type' key");
+        return;
     }
 
     if(const auto it = json.find("throttle_rate"); it != json.end())
@@ -932,7 +941,8 @@ void ROSNode::unsubscribeHandler(WSClient* client, const nlohmann::json& json,
     }
     else
     {
-        ROS_WARN_STREAM("Received 'unsubscribe' msg without required 'topic' key");
+        sendStatus(client, rbp::StatusLevel::Error,
+                   "Received 'unsubscribe' msg without required 'topic' key");
         return;
     }
 
@@ -951,7 +961,8 @@ void ROSNode::callServiceHandler(WSClient* client, const nlohmann::json& json,
     }
     else
     {
-        ROS_WARN_STREAM("Received 'call_service' msg without required 'service' key");
+        sendStatus(client, rbp::StatusLevel::Error,
+                   "Received 'call_service' msg without required 'service' key");
         return;
     }
 
@@ -961,7 +972,8 @@ void ROSNode::callServiceHandler(WSClient* client, const nlohmann::json& json,
     }
     else
     {
-        ROS_WARN_STREAM("Received 'call_service' msg without required 'type' key");
+        sendStatus(client, rbp::StatusLevel::Error,
+                   "Received 'call_service' msg without required 'type' key");
         return;
     }
 
@@ -1019,14 +1031,40 @@ void ROSNode::setLevelHandler(WSClient* client, const nlohmann::json& json,
                 ss << str << " ";
             }
             ss << "]";
-            ROS_ERROR_STREAM(ss.str());
+            sendStatus(client, rbp::StatusLevel::Error, ss.str());
+            return;
         }
     }
     else
     {
-        ROS_WARN_STREAM("Received 'set_level' msg without required 'level' key");
+        sendStatus(client, rbp::StatusLevel::Error,
+                   "Received 'set_level' msg without required 'level' key");
         return;
     }
 
     setLevel(client, args);
+}
+
+SubscriberClient::SubscriberClient(WSClient* wsClient, const rbp::SubscribeArgs& args)
+    : client{wsClient}, queueSize{args.queueSize}, throttleRate_ms{args.throttleRate},
+      fragmentSize{args.fragmentSize}, compression{args.compression}
+{
+    setEncoding(args.compression);
+}
+
+void SubscriberClient::setEncoding(const std::string& compression)
+{
+    // Default = JSON, PNG not implemented
+    if(compression == "cbor")
+    {
+        encoding = rbp::Encoding::CBOR;
+    }
+    else if(compression == "cbor-raw")
+    {
+        encoding = rbp::Encoding::CBOR_RAW;
+    }
+    else
+    {
+        encoding = rbp::Encoding::JSON;
+    }
 }

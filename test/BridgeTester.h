@@ -15,6 +15,8 @@ private slots:
     void canSubscribeToATopicWithThrottleRate();
     void canSubscribeToATopicAndSendCBOR();
     void canSubscribeThenUnsubscribeToATopic();
+    void cannotSubscribeToATopicWithoutType();
+    void cannotSubscribeToATopicWithEmptyType();
     void canPublishOnATopicJSON();
     void canPublishOnALatchedTopicAndSubscribeLater();
     void cannotPublishOnANotLatchedTopicAndSubscribeLater();

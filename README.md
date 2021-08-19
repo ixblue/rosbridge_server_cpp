@@ -20,6 +20,7 @@ Les "compressions" **JSON**, **CBOR** et **CBOR-RAW** sont supportés mais pas l
 
 En plus des fonctionnalités non implémentées, quelques choix de design diffèrent :
 
+- Le paramètre `type` de la requête `subscribe` est obligatoire. Si elle est absente, la version Python  recherche le type avec l'API rosmaster.
 - Le paramètre `type` de la requête `call_service` est obligatoire. La version Python l'ignore et recherche le type avec l'API rosmaster.
 
 ## Détails d'implémentation

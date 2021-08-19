@@ -12,5 +12,5 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "p_rosbridge_server_cpp", ros::init_options::NoSigintHandler);
     ROSNode node;
     node.start();
-    return app.exec();
+    return QCoreApplication::exec();
 }

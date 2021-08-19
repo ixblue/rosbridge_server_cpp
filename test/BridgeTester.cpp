@@ -379,6 +379,44 @@ void BridgeTester::canSubscribeThenUnsubscribeToATopic()
     QVERIFY(client->m_lastSentTextMsgs.empty());
 }
 
+void BridgeTester::cannotSubscribeToATopicWithoutType()
+{
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+    // Send JSON to mock socket
+    client->receivedTextMessage(R"({"op":"subscribe","topic":"/hello"})");
+
+    QTest::qWait(10);
+
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
+
+    const auto jsonRes =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString());
+    QCOMPARE(jsonRes["op"].get<std::string>(), std::string{"status"});
+    QCOMPARE(jsonRes["level"].get<std::string>(), std::string{"error"});
+}
+
+void BridgeTester::cannotSubscribeToATopicWithEmptyType()
+{
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+    // Send JSON to mock socket
+    client->receivedTextMessage(R"({"op":"subscribe","topic":"/hello","type":""})");
+
+    QTest::qWait(10);
+
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
+
+    const auto jsonRes =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString());
+    QCOMPARE(jsonRes["op"].get<std::string>(), std::string{"status"});
+    QCOMPARE(jsonRes["level"].get<std::string>(), std::string{"error"});
+}
+
 void BridgeTester::canPublishOnATopicJSON()
 {
     ros::NodeHandle nh;
