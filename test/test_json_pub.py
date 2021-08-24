@@ -30,6 +30,7 @@ class TestWebsocketJsonPub(unittest.TestCase):
             def onOpen(self):
                 self.sendMessage(json.dumps({
                     'op': 'subscribe',
+                    'type': 'std_msgs/String',
                     'topic': TOPIC,
                     'compression': 'none',
                 }).encode('utf-8'))
