@@ -68,10 +68,10 @@ void ROSNode::start()
 }
 
 std::tuple<std::string, std::vector<uint8_t>, std::vector<uint8_t>>
-ROSNode::encodeToWireFormat(ros_babel_fish::BabelFish& fish,
-                            const ros::Time& receivedTime, const std::string& topic,
-                            const ros_babel_fish::BabelFishMessage::ConstPtr& msg,
-                            bool toJson, bool toCbor, bool toCborRaw)
+ROSNode::encodeMsgToWireFormat(ros_babel_fish::BabelFish& fish,
+                               const ros::Time& receivedTime, const std::string& topic,
+                               const ros_babel_fish::BabelFishMessage::ConstPtr& msg,
+                               bool toJson, bool toCbor, bool toCborRaw)
 {
     std::string jsonStr;
     std::vector<uint8_t> cborVect;
@@ -105,6 +105,48 @@ ROSNode::encodeToWireFormat(ros_babel_fish::BabelFish& fish,
     }
 
     return {jsonStr, cborVect, cborRawVect};
+}
+
+std::tuple<std::string, std::vector<uint8_t>, std::vector<uint8_t>>
+ROSNode::encodeMsgToWireFormat(ros_babel_fish::BabelFish& fish,
+                               const ros::Time& receivedTime, const std::string& topic,
+                               const ros_babel_fish::BabelFishMessage::ConstPtr& msg,
+                               rosbridge_protocol::Encoding encoding)
+{
+    const bool toJson = encoding == rbp::Encoding::JSON;
+    const bool toCbor = encoding == rbp::Encoding::CBOR;
+    const bool toCborRaw = encoding == rbp::Encoding::CBOR_RAW;
+    return encodeMsgToWireFormat(fish, receivedTime, topic, msg, toJson, toCbor,
+                                 toCborRaw);
+}
+
+std::tuple<std::string, std::vector<uint8_t>, std::vector<uint8_t>>
+ROSNode::encodeServiceResponseToWireFormat(const std::string& service,
+                                           const std::string& id,
+                                           const nlohmann::json& values, bool result,
+                                           rosbridge_protocol::Encoding encoding)
+{
+    nlohmann::json json;
+    json["op"] = "service_response";
+    json["service"] = service;
+    if(!id.empty())
+    {
+        json["id"] = id;
+    }
+    json["result"] = result;
+    json["values"] = values;
+
+    if((encoding != rbp::Encoding::JSON) && ((encoding != rbp::Encoding::CBOR)))
+    {
+        ROS_ERROR_STREAM("Only JSON and CBOR encoding supported for service response, "
+                         "defaulting to JSON");
+    }
+
+    if(encoding == rbp::Encoding::CBOR)
+    {
+        return {"", nlohmann::json::to_cbor(json), {}};
+    }
+    return {json.dump(), {}, {}};
 }
 
 void ROSNode::advertise(WSClient* client, const rbp::AdvertiseArgs& args)
@@ -220,7 +262,7 @@ void ROSNode::udapteSubscriberClient(SubscriberClient& c, const rbp::SubscribeAr
     c.fragmentSize = std::min(c.fragmentSize, args.fragmentSize);
     c.queueSize = std::min(c.queueSize, args.queueSize);
     c.compression = args.compression;
-    c.setEncoding(args.compression);
+    c.encoding = rbp::compressionToEncoding(args.compression);
     m_encodings.insert(c.encoding);
 }
 
@@ -250,13 +292,10 @@ void ROSNode::subscribe(WSClient* client, const rbp::SubscribeArgs& args)
         // If the topic is latched, send the last message directly to the new client
         if(it->second.isLatched && subClient)
         {
-            const bool toJson = subClient->encoding == rbp::Encoding::JSON;
-            const bool toCbor = subClient->encoding == rbp::Encoding::CBOR;
-            const bool toCborRaw = subClient->encoding == rbp::Encoding::CBOR_RAW;
-            const auto [jsonStr, cborVect, cborRawVect] =
-                encodeToWireFormat(*m_fish, it->second.lastMessageReceivedTime, it->first,
-                                   it->second.lastMessage, toJson, toCbor, toCborRaw);
-            sendToClient(subClient.get(), jsonStr, cborVect, cborRawVect);
+            const auto [jsonStr, cborVect, cborRawVect] = encodeMsgToWireFormat(
+                *m_fish, it->second.lastMessageReceivedTime, it->first,
+                it->second.lastMessage, subClient->encoding);
+            sendTopicToClient(subClient.get(), jsonStr, cborVect, cborRawVect);
         }
     }
     else
@@ -306,46 +345,23 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
                                                           m_serviceTimeout, this);
 
         connect(serviceClient, &ServiceCallerWithTimeout::success, this,
-                [this, id = args.id, serviceName = args.serviceName,
-                 compression = args.compression, client]() {
+                [this, id = args.id, compression = args.compression,
+                 serviceName = args.serviceName, client]() {
                     auto* serviceClient =
                         qobject_cast<ServiceCallerWithTimeout*>(sender());
                     if(client != nullptr)
                     {
                         auto res = serviceClient->getResponse();
 
-                        nlohmann::json json;
-                        json["op"] = "service_response";
-                        json["service"] = serviceName;
-                        if(!id.empty())
-                        {
-                            json["id"] = id;
-                        }
-                        json["result"] = true;
-
-                        nlohmann::json msgJson =
+                        nlohmann::json responseJson =
                             ros_nlohmann_converter::translatedMsgtoJson(
                                 *res->translated_message);
 
-                        // Encode to json only once
-                        if(compression == "cbor-raw")
-                        {
-                            std::vector<uint8_t> data(res->input_message->buffer(),
-                                                      res->input_message->buffer() +
-                                                          res->input_message->size());
-                            nlohmann::json::binary_t jsonBin{data};
-                            json["values"] = {{"bytes", jsonBin}};
-                            sendBinaryMsg(client, nlohmann::json::to_cbor(json));
-                        }
-                        else
-                        {
-                            json["values"] = msgJson;
-                            if(compression == "cbor")
-                            {
-                                sendBinaryMsg(client, nlohmann::json::to_cbor(json));
-                            }
-                            sendMsg(client, json.dump());
-                        }
+                        const auto encoding = rbp::compressionToEncoding(compression);
+                        const auto [json, cbor, cborRaw] =
+                            encodeServiceResponseToWireFormat(
+                                serviceName, id, responseJson, true, encoding);
+                        sendMsgToClient(client, json, cbor, cborRaw, encoding);
                     }
                     else
                     {
@@ -359,47 +375,37 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
                     serviceClient->disconnect();
                 });
 
-        connect(serviceClient, &ServiceCallerWithTimeout::error, this,
-                [this, id = args.id,compression = args.compression, client, serviceName = args.serviceName](const QString& errorMsg) {
+        connect(
+            serviceClient, &ServiceCallerWithTimeout::error, this,
+            [this, id = args.id, compression = args.compression, client,
+             serviceName = args.serviceName](const QString& errorMsg) {
+                if(client != nullptr)
+                {
+                    const auto encoding = rbp::compressionToEncoding(compression);
+                    const auto [json, cbor, cborRaw] = encodeServiceResponseToWireFormat(
+                        serviceName, id, {errorMsg.toStdString()}, false, encoding);
+                    sendMsgToClient(client, json, cbor, cborRaw, encoding);
 
-                    if(client != nullptr)
-                    {
-                        nlohmann::json json;
-                        json["op"] = "service_response";
-                        json["service"] = serviceName;
-                        json["values"] = {errorMsg.toStdString()};
-                        if(!id.empty())
-                        {
-                            json["id"] = id;
-                        }
-                        json["result"] = false;
+                    sendStatus(client, rbp::StatusLevel::Error, errorMsg.toStdString());
+                }
 
-                        // Encode to json only once
-                        if(compression == "cbor-raw")
-                        {
-                            sendBinaryMsg(client, nlohmann::json::to_cbor(json));
-                        }
-                        else
-                        {
-                            if(compression == "cbor")
-                            {
-                                sendBinaryMsg(client, nlohmann::json::to_cbor(json));
-                            }
-                            sendMsg(client, json.dump());
-                        }
-                        sendStatus(client, rbp::StatusLevel::Error,
-                                   errorMsg.toStdString());
-                    }
-
-                    // Disconnect allows to drop all copies of serviceClient shared_ptr
-                    sender()->disconnect();
-                });
+                // Disconnect allows to drop all copies of serviceClient shared_ptr
+                sender()->disconnect();
+            });
         connect(serviceClient, &ServiceCallerWithTimeout::timeout, this,
-                [this, client, serviceName = args.serviceName]() {
+                [this, id = args.id, compression = args.compression, client,
+                 serviceName = args.serviceName]() {
                     if(client != nullptr)
                     {
                         std::ostringstream ss;
                         ss << "Service " << serviceName << " call timeout";
+
+                        const auto encoding = rbp::compressionToEncoding(compression);
+                        const auto [json, cbor, cborRaw] =
+                            encodeServiceResponseToWireFormat(serviceName, id, {ss.str()},
+                                                              false, encoding);
+                        sendMsgToClient(client, json, cbor, cborRaw, encoding);
+
                         sendStatus(client, rbp::StatusLevel::Error, ss.str());
                     }
 
@@ -414,32 +420,13 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
         std::ostringstream ss;
         ss << "Service call on unknown service type: '" << args.serviceType
            << "': " << e.what();
+
+        const auto encoding = rbp::compressionToEncoding(args.compression);
+        const auto [json, cbor, cborRaw] = encodeServiceResponseToWireFormat(
+            args.serviceName, args.id, {ss.str()}, false, encoding);
+        sendMsgToClient(client, json, cbor, cborRaw, encoding);
+
         sendStatus(client, rbp::StatusLevel::Error, ss.str());
-
-        nlohmann::json json;
-        json["op"] = "service_response";
-        json["service"] = args.serviceName;
-        json["values"] = {"Unknown service type : " + args.serviceType};
-        if(!args.id.empty())
-        {
-            json["id"] = args.id;
-        }
-        json["result"] = false;
-
-        // Encode to json only once
-        if(args.compression == "cbor-raw")
-        {
-            sendBinaryMsg(client, nlohmann::json::to_cbor(json));
-        }
-        else
-        {
-            if(args.compression == "cbor")
-            {
-                sendBinaryMsg(client, nlohmann::json::to_cbor(json));
-            }
-            sendMsg(client, json.dump());
-        }
-
         return;
     }
     catch(const std::runtime_error& e)
@@ -448,29 +435,10 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
         ss << "Bad service args: '" << args.args.dump() << "': " << e.what();
         sendStatus(client, rbp::StatusLevel::Error, ss.str());
 
-        nlohmann::json json;
-        json["op"] = "service_response";
-        json["service"] = args.serviceName;
-        json["values"] = {"Bad service args: " + args.args.dump()};
-        if(!args.id.empty())
-        {
-            json["id"] = args.id;
-        }
-        json["result"] = false;
-
-        // Encode to json only once
-        if(args.compression == "cbor-raw")
-        {
-            sendBinaryMsg(client, nlohmann::json::to_cbor(json));
-        }
-        else
-        {
-            if(args.compression == "cbor")
-            {
-                sendBinaryMsg(client, nlohmann::json::to_cbor(json));
-            }
-            sendMsg(client, json.dump());
-        }
+        const auto encoding = rbp::compressionToEncoding(args.compression);
+        const auto [json, cbor, cborRaw] = encodeServiceResponseToWireFormat(
+            args.serviceName, args.id, {ss.str()}, false, encoding);
+        sendMsgToClient(client, json, cbor, cborRaw, encoding);
 
         return;
     }
@@ -645,7 +613,7 @@ void ROSNode::handleROSMessage(const std::string& topic,
         const bool toCbor = m_encodings.count(rbp::Encoding::CBOR) > 0;
         const bool toCborRaw = m_encodings.count(rbp::Encoding::CBOR_RAW) > 0;
         QElapsedTimer t;
-        auto [jsonStr, cborVect, cborRawVect] = encodeToWireFormat(
+        auto [jsonStr, cborVect, cborRawVect] = encodeMsgToWireFormat(
             *m_fish, receivedTime, topic, msg, toJson, toCbor, toCborRaw);
 
         ROS_DEBUG_STREAM_NAMED("topic", "Converted ROS msg on topic "
@@ -670,7 +638,7 @@ void ROSNode::handleROSMessage(const std::string& topic,
                        (ros::Time::now() - client->lastTimeMsgSent).toSec() >
                            client->throttleRate_ms / 1000.)
                     {
-                        sendToClient(client.get(), jsonStr, cborVect, cborRawVect);
+                        sendTopicToClient(client.get(), jsonStr, cborVect, cborRawVect);
                     }
                 }
                 else
@@ -755,22 +723,30 @@ void ROSNode::sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binary
     QMetaObject::invokeMethod(client, "sendBinaryMsg", Q_ARG(QByteArray, data));
 }
 
-void ROSNode::sendToClient(SubscriberClient* client, const std::string& jsonStr,
-                           const std::vector<uint8_t>& cborVect,
-                           const std::vector<uint8_t>& cborRawVect)
+void ROSNode::sendMsgToClient(WSClient* client, const std::string& jsonStr,
+                              const std::vector<uint8_t>& cborVect,
+                              const std::vector<uint8_t>& cborRawVect,
+                              rosbridge_protocol::Encoding encoding)
 {
-    if(client->encoding == rbp::Encoding::CBOR)
+    if(encoding == rbp::Encoding::CBOR)
     {
-        sendBinaryMsg(client->client, cborVect);
+        sendBinaryMsg(client, cborVect);
     }
-    else if(client->encoding == rbp::Encoding::CBOR_RAW)
+    else if(encoding == rbp::Encoding::CBOR_RAW)
     {
-        sendBinaryMsg(client->client, cborRawVect);
+        sendBinaryMsg(client, cborRawVect);
     }
     else
     {
-        sendMsg(client->client, jsonStr);
+        sendMsg(client, jsonStr);
     }
+}
+
+void ROSNode::sendTopicToClient(SubscriberClient* client, const std::string& jsonStr,
+                                const std::vector<uint8_t>& cborVect,
+                                const std::vector<uint8_t>& cborRawVect)
+{
+    sendMsgToClient(client->client, jsonStr, cborVect, cborRawVect, client->encoding);
     client->lastTimeMsgSent = ros::Time::now();
 }
 
@@ -1088,24 +1064,7 @@ void ROSNode::setLevelHandler(WSClient* client, const nlohmann::json& json,
 
 SubscriberClient::SubscriberClient(WSClient* wsClient, const rbp::SubscribeArgs& args)
     : client{wsClient}, queueSize{args.queueSize}, throttleRate_ms{args.throttleRate},
-      fragmentSize{args.fragmentSize}, compression{args.compression}
+      fragmentSize{args.fragmentSize}, compression{args.compression},
+      encoding{rosbridge_protocol::compressionToEncoding(args.compression)}
 {
-    setEncoding(args.compression);
-}
-
-void SubscriberClient::setEncoding(const std::string& compression)
-{
-    // Default = JSON, PNG not implemented
-    if(compression == "cbor")
-    {
-        encoding = rbp::Encoding::CBOR;
-    }
-    else if(compression == "cbor-raw")
-    {
-        encoding = rbp::Encoding::CBOR_RAW;
-    }
-    else
-    {
-        encoding = rbp::Encoding::JSON;
-    }
 }

@@ -24,6 +24,8 @@ enum class Encoding
     PNG, // Not-implemented
 };
 
+rosbridge_protocol::Encoding compressionToEncoding(const std::string& compression);
+
 const std::map<StatusLevel, std::string> statusLevelStringMap{
     {StatusLevel::None, "none"},
     {StatusLevel::Info, "info"},

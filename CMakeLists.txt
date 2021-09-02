@@ -65,6 +65,7 @@ add_library(${PROJECT_NAME}
     src/ROSNode.cpp
     src/WSClient.cpp
     src/ServiceCallerWithTimeout.cpp
+    src/rosbridge_protocol.cpp
     src/ros_to_nlohmann.cpp
     src/nlohmann_to_ros.cpp
 )

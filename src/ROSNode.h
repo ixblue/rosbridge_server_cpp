@@ -6,6 +6,7 @@
 #include <set>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <QObject>
@@ -40,7 +41,6 @@ struct SubscriberClient
     ros::Time lastTimeMsgSent;
 
     SubscriberClient(WSClient* wsClient, const rosbridge_protocol::SubscribeArgs& args);
-    void setEncoding(const std::string& compression);
 };
 
 struct ROSBridgeSubscriber
@@ -62,15 +62,20 @@ public:
     void start();
 
     static std::tuple<std::string, std::vector<uint8_t>, std::vector<uint8_t>>
-    encodeToWireFormat(ros_babel_fish::BabelFish& fish, const ros::Time& receivedTime,
-                       const std::string& topic,
-                       const ros_babel_fish::BabelFishMessage::ConstPtr& msg, bool toJson,
-                       bool toCbor, bool toCborRaw);
+    encodeMsgToWireFormat(ros_babel_fish::BabelFish& fish, const ros::Time& receivedTime,
+                          const std::string& topic,
+                          const ros_babel_fish::BabelFishMessage::ConstPtr& msg,
+                          bool toJson, bool toCbor, bool toCborRaw);
     static std::tuple<std::string, std::vector<uint8_t>, std::vector<uint8_t>>
-    encodeToWireFormat(ros_babel_fish::BabelFish& fish, const ros::Time& receivedTime,
-                       const std::string& topic,
-                       const ros_babel_fish::BabelFishMessage::ConstPtr& msg,
-                       rosbridge_protocol::Encoding encoding);
+    encodeMsgToWireFormat(ros_babel_fish::BabelFish& fish, const ros::Time& receivedTime,
+                          const std::string& topic,
+                          const ros_babel_fish::BabelFishMessage::ConstPtr& msg,
+                          rosbridge_protocol::Encoding encoding);
+
+    static std::tuple<std::string, std::vector<uint8_t>, std::vector<uint8_t>>
+    encodeServiceResponseToWireFormat(const std::string& service, const std::string& id,
+                                      const nlohmann::json& values, bool result,
+                                      rosbridge_protocol::Encoding encoding);
 
 public slots:
     void onWSMessage(const QString& message);
@@ -116,9 +121,13 @@ private:
                     const std::string& msg, const std::string& id = std::string{});
     void sendMsg(WSClient* client, const std::string& msg);
     void sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg);
-    void sendToClient(SubscriberClient* client, const std::string& jsonStr,
-                      const std::vector<uint8_t>& cborVect,
-                      const std::vector<uint8_t>& cborRawVect);
+    void sendMsgToClient(WSClient* client, const std::string& jsonStr,
+                         const std::vector<uint8_t>& cborVect,
+                         const std::vector<uint8_t>& cborRawVect,
+                         rosbridge_protocol::Encoding encoding);
+    void sendTopicToClient(SubscriberClient* client, const std::string& jsonStr,
+                           const std::vector<uint8_t>& cborVect,
+                           const std::vector<uint8_t>& cborRawVect);
     void addNewSubscriberClient(WSClient* client,
                                 const rosbridge_protocol::SubscribeArgs& args);
     void udapteSubscriberClient(SubscriberClient& c,
