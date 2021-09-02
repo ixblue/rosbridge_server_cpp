@@ -465,9 +465,10 @@ void ROSNode::onWSMessage(const QString& message)
 
         if(!json.is_object())
         {
-            ROS_WARN_STREAM(
-                "Received JSON is not a rosbridge message (not a JSON object): "
-                << message.toStdString());
+            std::ostringstream ss;
+            ss << "Received JSON is not a rosbridge message (not a JSON object): '"
+               << message.toStdString() << '"';
+            sendStatus(client, rbp::StatusLevel::Error, ss.str());
             return;
         }
 
@@ -487,20 +488,28 @@ void ROSNode::onWSMessage(const QString& message)
             }
             else
             {
-                ROS_ERROR_STREAM("Received unkown OP '" << op << "' ignoring");
+                std::ostringstream ss;
+                ss << "Received unkown OP '" << op << "' ignoring: '"
+                   << message.toStdString() << "'";
+                sendStatus(client, rbp::StatusLevel::Error, ss.str());
+                return;
             }
         }
         else
         {
-            ROS_WARN_STREAM("Received JSON is not a rosbridge message (on 'op' element): "
-                            << message.toStdString());
+            std::ostringstream ss;
+            ss << "Received JSON is not a rosbridge message (no 'op' element): '"
+               << message.toStdString() << "'";
+            sendStatus(client, rbp::StatusLevel::Error, ss.str());
             return;
         }
     }
     catch(const nlohmann::json::exception& e)
     {
-        ROS_ERROR_STREAM("Failed to parse the JSON message: "
-                         << e.what() << " message: '" << message.toStdString() << "'");
+        std::ostringstream ss;
+        ss << "Failed to parse the JSON message: " << e.what() << " message: '"
+           << message.toStdString() << "'";
+        sendStatus(client, rbp::StatusLevel::Error, ss.str());
     }
 }
 
