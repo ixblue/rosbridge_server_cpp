@@ -15,6 +15,7 @@
 #include <sensor_msgs/CompressedImage.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/NavSatFix.h>
+#include <sensor_msgs/SetCameraInfo.h>
 #include <std_msgs/Duration.h>
 #include <std_msgs/Float64.h>
 #include <std_msgs/String.h>
@@ -207,6 +208,10 @@ public:
     createMsgFromJson(ros_babel_fish::BabelFish& fish, const std::string& type,
                       const ros::Time& time, const std::string& jsonStr) = 0;
 
+    virtual ros_babel_fish::BabelFishMessage::Ptr
+    createServiceRequestFromJson(ros_babel_fish::BabelFish& fish, const std::string& type,
+                                 const std::string& jsonStr) = 0;
+
     virtual std::string toJsonString(ros_babel_fish::BabelFish& fish,
                                      const ros_babel_fish::BabelFishMessage& msg) = 0;
 
@@ -222,6 +227,17 @@ public:
     {
         auto json = nlohmann::json::parse(jsonStr);
         return ros_nlohmann_converter::createMsg(fish, type, time, json);
+    }
+
+    ros_babel_fish::BabelFishMessage::Ptr
+    createServiceRequestFromJson(ros_babel_fish::BabelFish& fish, const std::string& type,
+                                 const std::string& jsonStr) override
+    {
+        auto json = nlohmann::json::parse(jsonStr);
+        ros_babel_fish::Message::Ptr req = fish.createServiceRequest(type);
+        auto& compound = req->as<ros_babel_fish::CompoundMessage>();
+        ros_nlohmann_converter::fillMessageFromJson(json, compound);
+        return fish.translateMessage(req);
     }
 
     std::string toJsonString(ros_babel_fish::BabelFish& fish,
@@ -1087,6 +1103,50 @@ TYPED_TEST(JSONTester, CanFillNegativeDurationFromJson)
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
     EXPECT_EQ(compound["data"].value<ros::Duration>().sec, expectedMsg.data.sec);
     EXPECT_EQ(compound["data"].value<ros::Duration>().nsec, expectedMsg.data.nsec);
+}
+
+TYPED_TEST(JSONTester, CanFillSetCameraInfoSrvReqFromPartialJson)
+{
+    const auto jsonData = R"({
+        "camera_info":
+        {
+            "header":
+            {
+                "frame_id": "my_frame"
+            },
+            "height": 13,
+            "width": 16
+        }
+    })";
+
+    ros_babel_fish::BabelFish fish;
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = this->parser.createServiceRequestFromJson(
+                        fish, "sensor_msgs/SetCameraInfo", jsonData));
+    ros_babel_fish::TranslatedMessage::Ptr translated = fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+    EXPECT_EQ(compound["camera_info"]["height"].value<double>(), 13);
+    EXPECT_EQ(compound["camera_info"]["width"].value<double>(), 16);
+}
+
+TYPED_TEST(JSONTester, CannotFillSetCameraInfoSrvReqFromBadJson)
+{
+    // camera_info indent level missing, fields directly in the json root
+    const auto jsonData = R"({
+        "header":
+        {
+            "frame_id": "my_frame"
+        },
+        "height": 13,
+        "width": 16
+    })";
+
+    ros_babel_fish::BabelFish fish;
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_THROW(rosMsg = this->parser.createServiceRequestFromJson(
+                     fish, "sensor_msgs/SetCameraInfo", jsonData),
+                 std::runtime_error);
 }
 
 /////////////////

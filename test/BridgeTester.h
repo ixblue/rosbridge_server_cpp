@@ -26,4 +26,6 @@ private slots:
     void canCallAServiceJSON();
     void canCallAServiceWithId();
     void canCallAServiceCBOR();
+    void cannotCallAServiceWithBadJSON();
+    void cannotCallAServiceWithJSONBadKey();
 };

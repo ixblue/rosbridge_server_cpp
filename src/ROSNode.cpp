@@ -442,6 +442,38 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
 
         return;
     }
+    catch(const std::runtime_error& e)
+    {
+        std::ostringstream ss;
+        ss << "Bad service args: '" << args.args.dump() << "': " << e.what();
+        sendStatus(client, rbp::StatusLevel::Error, ss.str());
+
+        nlohmann::json json;
+        json["op"] = "service_response";
+        json["service"] = args.serviceName;
+        json["values"] = {"Bad service args: " + args.args.dump()};
+        if(!args.id.empty())
+        {
+            json["id"] = args.id;
+        }
+        json["result"] = false;
+
+        // Encode to json only once
+        if(args.compression == "cbor-raw")
+        {
+            sendBinaryMsg(client, nlohmann::json::to_cbor(json));
+        }
+        else
+        {
+            if(args.compression == "cbor")
+            {
+                sendBinaryMsg(client, nlohmann::json::to_cbor(json));
+            }
+            sendMsg(client, json.dump());
+        }
+
+        return;
+    }
 }
 
 void ROSNode::setLevel(WSClient* client, const rosbridge_protocol::SetLevelArgs& args)

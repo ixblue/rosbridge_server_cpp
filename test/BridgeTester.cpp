@@ -13,6 +13,8 @@
 
 constexpr auto PUBLISH_WAIT_TIME_MS = 120;
 
+using namespace std::string_literals;
+
 class MockWSClient : public WSClient
 {
     Q_OBJECT
@@ -746,6 +748,91 @@ void BridgeTester::canCallAServiceCBOR()
     QCOMPARE(client->m_lastSentBinaryMsg,
              QByteArray(reinterpret_cast<const char*>(expectedCborData.data()),
                         expectedCborData.size()));
+}
+
+void BridgeTester::cannotCallAServiceWithBadJSON()
+{
+    ros::NodeHandle nh;
+    bool serviceHasBeenCalled = false;
+    bool serviceReq = false;
+    ros::ServiceServer service =
+        nh.advertiseService<std_srvs::SetBoolRequest, std_srvs::SetBoolResponse>(
+            "/set_bool",
+            [&serviceHasBeenCalled, &serviceReq](std_srvs::SetBoolRequest& req,
+                                                 std_srvs::SetBoolResponse& res) {
+                serviceHasBeenCalled = true;
+                serviceReq = req.data;
+                res.success = true;
+                res.message = "ok";
+                return true;
+            });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+
+    // Faulty JSON, {true} instead of {"data": true}
+    client->receivedTextMessage(
+        R"({"op":"call_service","service":"/set_bool","type":"std_srvs/SetBool","args":{true}})");
+
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
+
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
+
+    QVERIFY(!serviceHasBeenCalled);
+    QVERIFY(!serviceReq);
+
+    const auto status =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString());
+    QCOMPARE(status["op"].get<std::string>(), "status"s);
+}
+
+void BridgeTester::cannotCallAServiceWithJSONBadKey()
+{
+    ros::NodeHandle nh;
+    bool serviceHasBeenCalled = false;
+    bool serviceReq = false;
+    ros::ServiceServer service =
+        nh.advertiseService<std_srvs::SetBoolRequest, std_srvs::SetBoolResponse>(
+            "/set_bool",
+            [&serviceHasBeenCalled, &serviceReq](std_srvs::SetBoolRequest& req,
+                                                 std_srvs::SetBoolResponse& res) {
+                serviceHasBeenCalled = true;
+                serviceReq = req.data;
+                res.success = true;
+                res.message = "ok";
+                return true;
+            });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+
+    // Faulty JSON, "toto" field instead of "data"
+    client->receivedTextMessage(
+        R"({"op":"call_service","service":"/set_bool","type":"std_srvs/SetBool","args":{"toto": true}})");
+
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
+
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 2UL);
+
+    QVERIFY(!serviceHasBeenCalled);
+    QVERIFY(!serviceReq);
+
+    const auto status =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString());
+    QCOMPARE(status["op"].get<std::string>(), "status"s);
+
+    const auto response =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(1).toStdString());
+    QCOMPARE(response["op"].get<std::string>(), "service_response"s);
+    QCOMPARE(response["result"].get<bool>(), false);
 }
 
 /*!
