@@ -77,6 +77,9 @@ public:
                                       const nlohmann::json& values, bool result,
                                       rosbridge_protocol::Encoding encoding);
 
+    static std::string getMandatoryNotEmptyStringFromJson(const nlohmann::json& json,
+                                                          const std::string& key);
+
 public slots:
     void onWSMessage(const QString& message);
     void onWSBinaryMessage(const QByteArray& message);

@@ -1,6 +1,10 @@
 #include <sstream>
 
+#include <boost/algorithm/string.hpp>
+
 #include <QCoreApplication>
+#include <stdexcept>
+
 #include <QElapsedTimer>
 #include <QMetaObject>
 #include <QWebSocket>
@@ -16,6 +20,7 @@
 #include "nlohmann_to_ros.h"
 #include "ros_to_nlohmann.h"
 
+using namespace std::string_literals;
 namespace rbp = rosbridge_protocol;
 
 ROSNode::ROSNode(QObject* parent)
@@ -147,6 +152,22 @@ ROSNode::encodeServiceResponseToWireFormat(const std::string& service,
         return {"", nlohmann::json::to_cbor(json), {}};
     }
     return {json.dump(), {}, {}};
+}
+
+std::string ROSNode::getMandatoryNotEmptyStringFromJson(const nlohmann::json& json,
+                                                        const std::string& key)
+{
+    if(const auto it = json.find(key); it != json.end())
+    {
+        const auto str = it->get<std::string>();
+        if(!str.empty())
+        {
+            return str;
+        }
+    }
+    std::ostringstream ss;
+    ss << "without required '" << key << "' key";
+    throw std::runtime_error(ss.str());
 }
 
 void ROSNode::advertise(WSClient* client, const rbp::AdvertiseArgs& args)
@@ -806,221 +827,176 @@ void ROSNode::publishStats()
 void ROSNode::advertiseHandler(WSClient* client, const nlohmann::json& json,
                                const std::string& id)
 {
-    rbp::AdvertiseArgs args;
-    args.id = id;
-
-    if(const auto it = json.find("topic"); it != json.end())
+    try
     {
-        args.topic = it->get<std::string>();
+        rbp::AdvertiseArgs args;
+        args.id = id;
+        args.topic = getMandatoryNotEmptyStringFromJson(json, "topic");
+        args.type = getMandatoryNotEmptyStringFromJson(json, "type");
+
+        if(const auto it = json.find("latch"); it != json.end())
+        {
+            args.latched = it->get<bool>();
+        }
+
+        if(const auto it = json.find("queue_size"); it != json.end())
+        {
+            args.queueSize = it->get<unsigned int>();
+        }
+
+        advertise(client, args);
     }
-    else
+    catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'advertise' msg without required 'topic' key");
-        return;
+                   "Received 'advertise' msg "s + e.what());
     }
-
-    if(const auto it = json.find("type"); it != json.end())
-    {
-        args.type = it->get<std::string>();
-    }
-    else
-    {
-        sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'advertise' msg without required 'type' key");
-        return;
-    }
-
-    if(const auto it = json.find("latch"); it != json.end())
-    {
-        args.latched = it->get<bool>();
-    }
-
-    if(const auto it = json.find("queue_size"); it != json.end())
-    {
-        args.queueSize = it->get<unsigned int>();
-    }
-
-    advertise(client, args);
 }
 
 void ROSNode::unadvertiseHandler(WSClient* client, const nlohmann::json& json,
                                  const std::string& id)
 {
-    rbp::UnadvertiseArgs args;
-    args.id = id;
-
-    if(const auto it = json.find("topic"); it != json.end())
+    try
     {
-        args.topic = it->get<std::string>();
+        rbp::UnadvertiseArgs args;
+        args.id = id;
+        args.topic = getMandatoryNotEmptyStringFromJson(json, "topic");
+        unadvertise(client, args);
     }
-    else
+    catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'unadvertise' msg without required 'topic' key");
-        return;
+                   "Received 'unadvertise' msg "s + e.what());
     }
-
-    unadvertise(client, args);
 }
 
 void ROSNode::publishHandler(WSClient* client, const nlohmann::json& json,
                              const std::string& id)
 {
-    rbp::PublishArgs args;
-    args.id = id;
-
-    if(const auto it = json.find("topic"); it != json.end())
+    try
     {
-        args.topic = it->get<std::string>();
+        rbp::PublishArgs args;
+        args.id = id;
+        args.topic = getMandatoryNotEmptyStringFromJson(json, "topic");
+
+        if(const auto it = json.find("msg"); it != json.end())
+        {
+            args.msg = *it;
+        }
+        else
+        {
+            throw std::runtime_error("without required 'msg' key");
+        }
+
+        publish(client, args);
     }
-    else
+    catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'publish' msg without required 'topic' key");
-        return;
+                   "Received 'publish' msg "s + e.what());
     }
-
-    if(const auto it = json.find("msg"); it != json.end())
-    {
-        args.msg = *it;
-    }
-    else
-    {
-        sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'publish' msg without required 'msg' key");
-        return;
-    }
-
-    publish(client, args);
 }
 
 void ROSNode::subscribeHandler(WSClient* client, const nlohmann::json& json,
                                const std::string& id)
 {
-    rbp::SubscribeArgs args;
-    args.id = id;
-
-    if(const auto it = json.find("topic"); it != json.end())
+    try
     {
-        args.topic = it->get<std::string>();
+        rbp::SubscribeArgs args;
+        args.id = id;
+        args.topic = getMandatoryNotEmptyStringFromJson(json, "topic");
+        args.type = getMandatoryNotEmptyStringFromJson(json, "type");
+
+        if(const auto it = json.find("throttle_rate"); it != json.end())
+        {
+            args.throttleRate = it->get<int>();
+        }
+
+        if(const auto it = json.find("queue_size"); it != json.end())
+        {
+            args.queueSize = it->get<unsigned int>();
+        }
+
+        if(const auto it = json.find("fragment_size"); it != json.end())
+        {
+            args.fragmentSize = it->get<int>();
+        }
+
+        if(const auto it = json.find("compression"); it != json.end())
+        {
+            args.compression = it->get<std::string>();
+        }
+
+        subscribe(client, args);
     }
-    else
+    catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'subscribe' msg without required 'topic' key");
-        return;
+                   "Received 'subscribe' msg "s + e.what());
     }
-
-    if(const auto it = json.find("type"); it != json.end())
-    {
-        args.type = it->get<std::string>();
-    }
-    else
-    {
-        sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'subscribe' msg without required 'type' key");
-        return;
-    }
-
-    if(const auto it = json.find("throttle_rate"); it != json.end())
-    {
-        args.throttleRate = it->get<int>();
-    }
-
-    if(const auto it = json.find("queue_size"); it != json.end())
-    {
-        args.queueSize = it->get<unsigned int>();
-    }
-
-    if(const auto it = json.find("fragment_size"); it != json.end())
-    {
-        args.fragmentSize = it->get<int>();
-    }
-
-    if(const auto it = json.find("compression"); it != json.end())
-    {
-        args.compression = it->get<std::string>();
-    }
-
-    subscribe(client, args);
 }
 
 void ROSNode::unsubscribeHandler(WSClient* client, const nlohmann::json& json,
                                  const std::string& id)
 {
-    rbp::UnsubscribeArgs args;
-    args.id = id;
-
-    if(const auto it = json.find("topic"); it != json.end())
+    try
     {
-        args.topic = it->get<std::string>();
+        rbp::UnsubscribeArgs args;
+        args.id = id;
+        args.topic = getMandatoryNotEmptyStringFromJson(json, "topic");
+        unsubscribe(client, args);
     }
-    else
+    catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'unsubscribe' msg without required 'topic' key");
-        return;
+                   "Received 'unsubscribe' msg "s + e.what());
     }
-
-    unsubscribe(client, args);
 }
 
 void ROSNode::callServiceHandler(WSClient* client, const nlohmann::json& json,
                                  const std::string& id)
 {
-    rbp::CallServiceArgs args;
-    args.id = id;
-
-    if(const auto it = json.find("service"); it != json.end())
+    try
     {
-        args.serviceName = it->get<std::string>();
+        rbp::CallServiceArgs args;
+        args.id = id;
+        args.serviceName = getMandatoryNotEmptyStringFromJson(json, "service");
+        args.serviceType = getMandatoryNotEmptyStringFromJson(json, "type");
+
+        if(const auto it = json.find("fragment_size"); it != json.end())
+        {
+            args.fragmentSize = it->get<int>();
+        }
+
+        if(const auto it = json.find("compression"); it != json.end())
+        {
+            args.compression = it->get<std::string>();
+        }
+
+        if(const auto it = json.find("args"); it != json.end())
+        {
+            args.args = *it;
+        }
+
+        callService(client, args);
     }
-    else
+    catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'call_service' msg without required 'service' key");
-        return;
+                   "Received 'call_service' msg "s + e.what());
     }
-
-    if(const auto it = json.find("type"); it != json.end())
-    {
-        args.serviceType = it->get<std::string>();
-    }
-    else
-    {
-        sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'call_service' msg without required 'type' key");
-        return;
-    }
-
-    if(const auto it = json.find("fragment_size"); it != json.end())
-    {
-        args.fragmentSize = it->get<int>();
-    }
-
-    if(const auto it = json.find("compression"); it != json.end())
-    {
-        args.compression = it->get<std::string>();
-    }
-
-    if(const auto it = json.find("args"); it != json.end())
-    {
-        args.args = *it;
-    }
-    callService(client, args);
 }
 
 void ROSNode::setLevelHandler(WSClient* client, const nlohmann::json& json,
                               const std::string& id)
 {
-    rbp::SetLevelArgs args;
-    args.id = id;
-
-    if(const auto it = json.find("level"); it != json.end())
+    try
     {
-        const QString desiredLevel =
-            QString::fromStdString(it->get<std::string>()).toLower();
+        rbp::SetLevelArgs args;
+        args.id = id;
+
+        std::string desiredLevel = getMandatoryNotEmptyStringFromJson(json, "level");
+        boost::algorithm::to_lower(desiredLevel);
         if(desiredLevel == "info")
         {
             args.level = rbp::StatusLevel::Info;
@@ -1040,26 +1016,23 @@ void ROSNode::setLevelHandler(WSClient* client, const nlohmann::json& json,
         else
         {
             std::ostringstream ss;
-            ss << "Received 'set_level' request with unknown status level: '"
-               << desiredLevel.toStdString() << "', accepted values are: [";
+            ss << "with unknown status level: '" << desiredLevel
+               << "', accepted values are: [";
             for(const auto& [level, str] : rbp::statusLevelStringMap)
             {
                 (void)level;
                 ss << str << " ";
             }
             ss << "]";
-            sendStatus(client, rbp::StatusLevel::Error, ss.str());
-            return;
+            throw std::runtime_error(ss.str());
         }
+        setLevel(client, args);
     }
-    else
+    catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'set_level' msg without required 'level' key");
-        return;
+                   "Received 'set_level' msg "s + e.what());
     }
-
-    setLevel(client, args);
 }
 
 SubscriberClient::SubscriberClient(WSClient* wsClient, const rbp::SubscribeArgs& args)
