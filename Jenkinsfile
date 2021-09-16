@@ -20,6 +20,14 @@ pipeline {
                         wstool update -j `nproc --ignore=2` || true
                     """
                 }
+
+                // Install latest version of rosunit to handle p_rosbridge_server_cpp Qt tests
+                dir('tmp')
+                {
+                    sh 'git clone --depth=1 https://github.com/ros/ros'
+                    sh 'cp -r ros/tools/rosunit ../ws/src'
+                    sh 'rm -rf ros || true'
+                }
             }
         }
         stage('Build') {
