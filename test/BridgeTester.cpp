@@ -65,7 +65,7 @@ void BridgeTester::canSubscribeToATopicAndSendJson()
     const auto expectedJsonStr =
         R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})"_json.dump();
     const auto jsonStr =
-        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString()).dump();
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString()).dump();
     QCOMPARE(jsonStr, expectedJsonStr);
 }
 
@@ -106,9 +106,9 @@ void BridgeTester::twoClientsCanSubscribeToTheSameTopic()
     const auto expectedJsonStr =
         R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})"_json.dump();
     const auto json1Str =
-        nlohmann::json::parse(client1->m_lastSentTextMsgs.front().toStdString()).dump();
+        nlohmann::json::parse(client1->m_lastSentTextMsgs.at(0).toStdString()).dump();
     const auto json2Str =
-        nlohmann::json::parse(client2->m_lastSentTextMsgs.front().toStdString()).dump();
+        nlohmann::json::parse(client2->m_lastSentTextMsgs.at(0).toStdString()).dump();
     QCOMPARE(json1Str, expectedJsonStr);
     QCOMPARE(json2Str, expectedJsonStr);
 }
@@ -152,7 +152,7 @@ void BridgeTester::twoClientsCanSubscribeToTheSameLatchedTopic()
         R"({"op":"publish","topic":"/hello_latched","msg":{"data":"hello"}})"_json.dump();
 
     const auto json1Str =
-        nlohmann::json::parse(client1->m_lastSentTextMsgs.front().toStdString()).dump();
+        nlohmann::json::parse(client1->m_lastSentTextMsgs.at(0).toStdString()).dump();
     QCOMPARE(json1Str, expectedJsonStr);
 
     // Then client 2 subscribes
@@ -165,7 +165,7 @@ void BridgeTester::twoClientsCanSubscribeToTheSameLatchedTopic()
     QCOMPARE(client2->m_lastSentTextMsgs.size(), 1UL);
 
     const auto json2Str =
-        nlohmann::json::parse(client2->m_lastSentTextMsgs.front().toStdString()).dump();
+        nlohmann::json::parse(client2->m_lastSentTextMsgs.at(0).toStdString()).dump();
     QCOMPARE(json2Str, expectedJsonStr);
 }
 
@@ -358,7 +358,7 @@ void BridgeTester::canSubscribeThenUnsubscribeToATopic()
     const auto expectedJsonStr =
         R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})"_json.dump();
     const auto jsonStr =
-        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString()).dump();
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString()).dump();
     QCOMPARE(jsonStr, expectedJsonStr);
 
     // Clear buffer
@@ -395,7 +395,7 @@ void BridgeTester::cannotSubscribeToATopicWithoutType()
     QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
 
     const auto jsonRes =
-        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString());
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString());
     QCOMPARE(jsonRes["op"].get<std::string>(), std::string{"status"});
     QCOMPARE(jsonRes["level"].get<std::string>(), std::string{"error"});
 }
@@ -414,7 +414,7 @@ void BridgeTester::cannotSubscribeToATopicWithEmptyType()
     QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
 
     const auto jsonRes =
-        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString());
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString());
     QCOMPARE(jsonRes["op"].get<std::string>(), std::string{"status"});
     QCOMPARE(jsonRes["level"].get<std::string>(), std::string{"error"});
 }
@@ -527,7 +527,7 @@ void BridgeTester::cannotUnadvertiseATopicNotAdvertised()
     QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
 
     const auto jsonRes =
-        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString());
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString());
     QCOMPARE(jsonRes["op"].get<std::string>(), std::string{"status"});
     QCOMPARE(jsonRes["level"].get<std::string>(), std::string{"error"});
 }
@@ -659,7 +659,7 @@ void BridgeTester::canCallAServiceJSON()
         R"({"op":"service_response","service":"/set_bool","values":{"success":true,"message":"ok"},"result":true})"_json
             .dump();
     const auto jsonStr =
-        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString()).dump();
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString()).dump();
     QCOMPARE(jsonStr, expectedJsonStr);
 }
 
@@ -703,7 +703,7 @@ void BridgeTester::canCallAServiceWithId()
         R"({"op":"service_response","service":"/set_bool","values":{"success":true,"message":"ok"},"result":true,"id":"my_id"})"_json
             .dump();
     const auto jsonStr =
-        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString()).dump();
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString()).dump();
     QCOMPARE(jsonStr, expectedJsonStr);
 }
 
@@ -786,7 +786,7 @@ void BridgeTester::cannotCallAServiceWithBadJSON()
     QVERIFY(!serviceReq);
 
     const auto status =
-        nlohmann::json::parse(client->m_lastSentTextMsgs.front().toStdString());
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString());
     QCOMPARE(status["op"].get<std::string>(), "status"s);
 }
 
