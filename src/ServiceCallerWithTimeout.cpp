@@ -62,7 +62,7 @@ ServiceCallerWithTimeout::ServiceCallerWithTimeout(
     // Content from BabelFish::callService, split here to avoid the use of m_fish in
     // the other thread
     const std::string& datatype = req->as<ros_babel_fish::CompoundMessage>().datatype();
-    if(std::strcmp(datatype.c_str() + datatype.length() - 7, "Request") != 0)
+    if(std::strcmp(datatype.c_str() + (datatype.length() - 7), "Request") != 0)
     {
         throw ros_babel_fish::BabelFishException(
             "BabelFish can't call a service with a message that is not a request!");
@@ -103,7 +103,7 @@ ServiceCallerWithTimeout::~ServiceCallerWithTimeout()
 
 void ServiceCallerWithTimeout::call()
 {
-    m_timeoutTimer.start(m_serviceTimeout * 1000.0);
+    m_timeoutTimer.start(static_cast<int>(m_serviceTimeout * 1000.0));
 
     // Service thread
     m_serviceThread = std::thread([this]() {

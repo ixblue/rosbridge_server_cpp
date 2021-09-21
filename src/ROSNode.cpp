@@ -141,7 +141,7 @@ ROSNode::encodeServiceResponseToWireFormat(const std::string& service,
     json["result"] = result;
     json["values"] = values;
 
-    if((encoding != rbp::Encoding::JSON) && ((encoding != rbp::Encoding::CBOR)))
+    if((encoding != rbp::Encoding::JSON) && (encoding != rbp::Encoding::CBOR))
     {
         ROS_ERROR_STREAM("Only JSON and CBOR encoding supported for service response, "
                          "defaulting to JSON");
@@ -368,11 +368,11 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
         connect(serviceClient, &ServiceCallerWithTimeout::success, this,
                 [this, id = args.id, compression = args.compression,
                  serviceName = args.serviceName, client]() {
-                    auto* serviceClient =
+                    auto* serviceClientCaller =
                         qobject_cast<ServiceCallerWithTimeout*>(sender());
                     if(client != nullptr)
                     {
-                        auto res = serviceClient->getResponse();
+                        auto res = serviceClientCaller->getResponse();
 
                         nlohmann::json responseJson =
                             ros_nlohmann_converter::translatedMsgtoJson(
@@ -393,7 +393,7 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
                     }
 
                     // Disconnect allows to drop all copies of serviceClient shared_ptr
-                    serviceClient->disconnect();
+                    serviceClientCaller->disconnect();
                 });
 
         connect(
@@ -465,7 +465,8 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
     }
 }
 
-void ROSNode::setLevel(WSClient* client, const rosbridge_protocol::SetLevelArgs& args)
+void ROSNode::setLevel(const WSClient* client,
+                       const rosbridge_protocol::SetLevelArgs& args)
 {
     Q_UNUSED(client)
     m_currentStatusLevel = args.level;
@@ -534,7 +535,7 @@ void ROSNode::onWSMessage(const QString& message)
     }
 }
 
-void ROSNode::onWSBinaryMessage(const QByteArray& message)
+void ROSNode::onWSBinaryMessage(const QByteArray& message) const
 {
     Q_UNUSED(message)
     ROS_WARN_STREAM("Unhandled binary message received on WS");
@@ -614,7 +615,7 @@ void ROSNode::onNewWSConnection()
     publishStats();
 }
 
-void ROSNode::onWSServerError(QWebSocketProtocol::CloseCode error)
+void ROSNode::onWSServerError(QWebSocketProtocol::CloseCode error) const
 {
     ROS_ERROR_STREAM("Websocket server error ("
                      << static_cast<int>(error)
@@ -651,13 +652,13 @@ void ROSNode::handleROSMessage(const std::string& topic,
                 it->second.lastMessageReceivedTime = receivedTime;
             }
 
-            for(auto& client : it->second.clients)
+            for(const auto& client : it->second.clients)
             {
                 if(client->client->isReady())
                 {
                     if(client->throttleRate_ms == 0 ||
-                       (ros::Time::now() - client->lastTimeMsgSent).toSec() >
-                           client->throttleRate_ms / 1000.)
+                       ((ros::Time::now() - client->lastTimeMsgSent).toSec() >
+                        (client->throttleRate_ms / 1000.)))
                     {
                         sendTopicToClient(client.get(), jsonStr, cborVect, cborRawVect);
                     }
@@ -683,7 +684,7 @@ void ROSNode::handleROSMessage(const std::string& topic,
 
         if(it != m_subs.end())
         {
-            for(auto& client : it->second.clients)
+            for(const auto& client : it->second.clients)
             {
 
                 sendStatus(client->client, rbp::StatusLevel::Error, ss.str(),
@@ -729,18 +730,18 @@ void ROSNode::sendStatus(WSClient* client, rbp::StatusLevel level, const std::st
     }
 }
 
-void ROSNode::sendMsg(WSClient* client, const std::string& msg)
+void ROSNode::sendMsg(WSClient* client, const std::string& msg) const
 {
     ROS_DEBUG_STREAM_NAMED("json", "-> Send on ws: '" << msg << "'");
     QMetaObject::invokeMethod(client, "sendMsg",
                               Q_ARG(QString, QString::fromStdString(msg)));
 }
 
-void ROSNode::sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg)
+void ROSNode::sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg) const
 {
     ROS_DEBUG_STREAM_NAMED("json", "-> Send binary msg on ws");
-    auto data =
-        QByteArray(reinterpret_cast<const char*>(binaryMsg.data()), binaryMsg.size());
+    const auto data = QByteArray(reinterpret_cast<const char*>(binaryMsg.data()),
+                                 static_cast<int>(binaryMsg.size()));
     QMetaObject::invokeMethod(client, "sendBinaryMsg", Q_ARG(QByteArray, data));
 }
 
@@ -802,7 +803,7 @@ void ROSNode::addNewSubscriberClient(WSClient* client,
     ROS_DEBUG_STREAM("Subscribe to a new topic " << args.topic);
 }
 
-void ROSNode::publishStats()
+void ROSNode::publishStats() const
 {
     ROS_DEBUG("publishStats");
     {

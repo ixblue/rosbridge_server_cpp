@@ -82,12 +82,12 @@ public:
 
 public slots:
     void onWSMessage(const QString& message);
-    void onWSBinaryMessage(const QByteArray& message);
+    void onWSBinaryMessage(const QByteArray& message) const;
     void onWSClientDisconnected();
 
 private slots:
     void onNewWSConnection();
-    void onWSServerError(QWebSocketProtocol::CloseCode error);
+    void onWSServerError(QWebSocketProtocol::CloseCode error) const;
 
     // JSON Op handlers
     void advertiseHandler(WSClient* client, const nlohmann::json& json,
@@ -112,7 +112,7 @@ private slots:
     void subscribe(WSClient* client, const rosbridge_protocol::SubscribeArgs& args);
     void unsubscribe(WSClient* client, const rosbridge_protocol::UnsubscribeArgs& args);
     void callService(WSClient* client, const rosbridge_protocol::CallServiceArgs& args);
-    void setLevel(WSClient* client, const rosbridge_protocol::SetLevelArgs& args);
+    void setLevel(const WSClient* client, const rosbridge_protocol::SetLevelArgs& args);
 
 signals:
     void deleteServiceClient(const QString& serviceName);
@@ -122,8 +122,8 @@ private:
                           const ros_babel_fish::BabelFishMessage::ConstPtr& msg);
     void sendStatus(WSClient* client, rosbridge_protocol::StatusLevel level,
                     const std::string& msg, const std::string& id = std::string{});
-    void sendMsg(WSClient* client, const std::string& msg);
-    void sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg);
+    void sendMsg(WSClient* client, const std::string& msg) const;
+    void sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg) const;
     void sendMsgToClient(WSClient* client, const std::string& jsonStr,
                          const std::vector<uint8_t>& cborVect,
                          const std::vector<uint8_t>& cborRawVect,
@@ -136,7 +136,7 @@ private:
     void udapteSubscriberClient(SubscriberClient& c,
                                 const rosbridge_protocol::SubscribeArgs& args);
 
-    void publishStats();
+    void publishStats() const;
 
     ros::NodeHandle m_nhPrivate{"~"};
     ros::NodeHandle m_nhNs;

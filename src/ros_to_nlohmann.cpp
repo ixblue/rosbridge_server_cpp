@@ -68,8 +68,8 @@ nlohmann::json translatedMsgtoJson(const ros_babel_fish::Message& message)
 
                         break;
                     case ros_babel_fish::MessageTypes::UInt32:
-                        out.push_back(static_cast<unsigned int>(
-                            base.as<ros_babel_fish::ArrayMessage<uint32_t>>()[i]));
+                        out.push_back(
+                            base.as<ros_babel_fish::ArrayMessage<uint32_t>>()[i]);
 
                         break;
                     case ros_babel_fish::MessageTypes::UInt64:
@@ -82,8 +82,8 @@ nlohmann::json translatedMsgtoJson(const ros_babel_fish::Message& message)
 
                         break;
                     case ros_babel_fish::MessageTypes::Int32:
-                        out.push_back(static_cast<int>(
-                            base.as<ros_babel_fish::ArrayMessage<int32_t>>()[i]));
+                        out.push_back(
+                            base.as<ros_babel_fish::ArrayMessage<int32_t>>()[i]);
 
                         break;
                     case ros_babel_fish::MessageTypes::Int64:
@@ -148,13 +148,13 @@ nlohmann::json translatedMsgtoJson(const ros_babel_fish::Message& message)
         case ros_babel_fish::MessageTypes::Float32: out = message.value<float>(); break;
         case ros_babel_fish::MessageTypes::Float64: out = message.value<double>(); break;
         case ros_babel_fish::MessageTypes::Time: {
-            const auto time = message.value<ros::Time>();
-            out = json{{"secs", time.sec}, {"nsecs", time.nsec}};
+            const auto rosTtime = message.value<ros::Time>();
+            out = json{{"secs", rosTtime.sec}, {"nsecs", rosTtime.nsec}};
             break;
         }
         case ros_babel_fish::MessageTypes::Duration: {
-            const auto time = message.value<ros::Duration>();
-            out = json{{"secs", time.sec}, {"nsecs", time.nsec}};
+            const auto rosTtime = message.value<ros::Duration>();
+            out = json{{"secs", rosTtime.sec}, {"nsecs", rosTtime.nsec}};
             break;
         }
         case ros_babel_fish::MessageTypes::String:

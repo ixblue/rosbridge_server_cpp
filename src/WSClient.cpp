@@ -21,7 +21,7 @@ void WSClient::connectSignals()
     connect(m_ws, &QWebSocket::disconnected, this, &WSClient::onWSDisconnected);
 
     connect(m_ws, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error),
-            [=](QAbstractSocket::SocketError error) {
+            [this](QAbstractSocket::SocketError error) {
                 ROS_ERROR_STREAM("WS error (" << static_cast<int>(error) << "): "
                                               << m_ws->errorString().toStdString());
             });
