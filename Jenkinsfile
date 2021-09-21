@@ -12,7 +12,6 @@ pipeline {
                 sh 'rm -rf *'
                 dir("ws/src/${PACKAGE_NAME}") {
                     checkout scm
-                    sh 'git submodule update --init'
                 }
                 dir('ws/src') {
                     sh """
@@ -75,7 +74,6 @@ pipeline {
             recordIssues tool: gcc()
             script {
                 currentBuild.result = currentBuild.result ?: 'SUCCESS'
-                notifyBitbucket()
             }
             sh "docker rmi ${DOCKER_IMAGE} || true"
         }
