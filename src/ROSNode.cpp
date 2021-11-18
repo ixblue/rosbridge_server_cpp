@@ -11,6 +11,7 @@
 
 #include <rosbridge_msgs/ConnectedClients.h>
 #include <std_msgs/Int32.h>
+#include <string>
 
 #include "nlohmann/json.hpp"
 
@@ -775,19 +776,6 @@ void ROSNode::sendTopicToClient(SubscriberClient* client, const std::string& jso
 void ROSNode::addNewSubscriberClient(WSClient* client,
                                      const rosbridge_protocol::SubscribeArgs& args)
 {
-    // Try to create a msg to check that we can find it
-    try
-    {
-        const auto dummyMsg = m_fish->createMessage(args.type);
-    }
-    catch(const ros_babel_fish::BabelFishException&)
-    {
-        std::ostringstream ss;
-        ss << "Unknown message type '" << args.type << "'";
-        sendStatus(client, rbp::StatusLevel::Error, ss.str());
-        return;
-    }
-
     ROSBridgeSubscriber sub;
     sub.type = args.type;
     sub.sub = m_nhPrivate.subscribe<ros_babel_fish::BabelFishMessage>(
@@ -906,7 +894,11 @@ void ROSNode::subscribeHandler(WSClient* client, const nlohmann::json& json,
         rbp::SubscribeArgs args;
         args.id = id;
         args.topic = getMandatoryNotEmptyStringFromJson(json, "topic");
-        args.type = getMandatoryNotEmptyStringFromJson(json, "type");
+
+        if(const auto it = json.find("type"); it != json.end())
+        {
+            args.type = it->get<std::string>();
+        }
 
         if(const auto it = json.find("throttle_rate"); it != json.end())
         {
