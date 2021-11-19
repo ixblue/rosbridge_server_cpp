@@ -381,8 +381,11 @@ void BridgeTester::canSubscribeThenUnsubscribeToATopic()
     QVERIFY(client->m_lastSentTextMsgs.empty());
 }
 
-void BridgeTester::cannotSubscribeToATopicWithoutType()
+void BridgeTester::canSubscribeToATopicWithoutType()
 {
+    ros::NodeHandle nh;
+    ros::Publisher pub = nh.advertise<std_msgs::String>("/hello", 10, false);
+
     // Create on heap because will call deleteLater in destructor
     auto client = new MockWSClient();
     ROSNode node;
@@ -390,18 +393,28 @@ void BridgeTester::cannotSubscribeToATopicWithoutType()
     // Send JSON to mock socket
     client->receivedTextMessage(R"({"op":"subscribe","topic":"/hello"})");
 
-    QTest::qWait(10);
+    // Publish a message on the topic
+    std_msgs::String msg;
+    msg.data = "hello";
+    pub.publish(msg);
+
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
 
-    const auto jsonRes =
-        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString());
-    QCOMPARE(jsonRes["op"].get<std::string>(), std::string{"status"});
-    QCOMPARE(jsonRes["level"].get<std::string>(), std::string{"error"});
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJsonStr =
+        R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})"_json.dump();
+    const auto jsonStr =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString()).dump();
+    QCOMPARE(jsonStr, expectedJsonStr);
 }
 
-void BridgeTester::cannotSubscribeToATopicWithEmptyType()
+void BridgeTester::canSubscribeToATopicWithEmptyType()
 {
+    ros::NodeHandle nh;
+    ros::Publisher pub = nh.advertise<std_msgs::String>("/hello", 10, false);
+
     // Create on heap because will call deleteLater in destructor
     auto client = new MockWSClient();
     ROSNode node;
@@ -409,14 +422,21 @@ void BridgeTester::cannotSubscribeToATopicWithEmptyType()
     // Send JSON to mock socket
     client->receivedTextMessage(R"({"op":"subscribe","topic":"/hello","type":""})");
 
-    QTest::qWait(10);
+    // Publish a message on the topic
+    std_msgs::String msg;
+    msg.data = "hello";
+    pub.publish(msg);
+
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
     QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
 
-    const auto jsonRes =
-        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString());
-    QCOMPARE(jsonRes["op"].get<std::string>(), std::string{"status"});
-    QCOMPARE(jsonRes["level"].get<std::string>(), std::string{"error"});
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJsonStr =
+        R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})"_json.dump();
+    const auto jsonStr =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString()).dump();
+    QCOMPARE(jsonStr, expectedJsonStr);
 }
 
 void BridgeTester::canPublishOnATopicJSON()
