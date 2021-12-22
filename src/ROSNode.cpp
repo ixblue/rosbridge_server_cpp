@@ -810,8 +810,9 @@ void ROSNode::publishStats() const
             p_rosbridge_server_cpp::WebSocketConnectedClient c;
             c.ip_address = client->ipAddress();
             c.connection_time = client->connectionTime();
-            c.webSocketInputRateKBytesSec = client->webSocketInputKBytesSec();
-            c.networkOutputRateKBytesSec = client->networkOutputKBytesSec();
+            c.websocket_input_rate_kbytes_sec = client->webSocketInputKBytesSec();
+            c.network_output_rate_kbytes_sec = client->networkOutputKBytesSec();
+            c.ping_ms = client->pingTime_ms();
             msg.clients.push_back(c);
         }
         m_connectedClientsPub.publish(msg);

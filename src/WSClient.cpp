@@ -47,8 +47,9 @@ void WSClient::connectSignals()
             });
 
     connect(m_ws, &QWebSocket::pong, this,
-            [](quint64 elapsedTime, const QByteArray& payload) {
+            [this](quint64 elapsedTime, const QByteArray& payload) {
                 Q_UNUSED(payload)
+                m_lastPingTime_ms = elapsedTime;
                 ROS_DEBUG_STREAM_NAMED("websocket",
                                        "Pong received with round-trip time of "
                                            << elapsedTime << " ms");
@@ -72,6 +73,16 @@ std::string WSClient::ipAddress() const
 ros::Time WSClient::connectionTime() const
 {
     return m_connectionTime;
+}
+
+float WSClient::webSocketInputKBytesSec() const
+{
+    return m_webSocketInputRateKBytesSec;
+}
+
+float WSClient::networkOutputKBytesSec() const
+{
+    return m_networkOutputRateKBytesSec;
 }
 
 std::string WSClient::name() const
@@ -113,6 +124,11 @@ void WSClient::abortConnection()
     // before trying to gently terminate the TCP connection. It needs to be stopped
     // immediatly to stop filling the buffer. This will trigger a disconnected signal.
     m_ws->abort();
+}
+
+qint64 WSClient::pingTime_ms() const
+{
+    return m_lastPingTime_ms;
 }
 
 void WSClient::sendMsg(const QString& msg)

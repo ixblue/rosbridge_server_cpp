@@ -26,15 +26,19 @@ public:
     std::string ipAddress() const;
     ros::Time connectionTime() const;
     // Amount of data to be sent to the websocket client
-    float webSocketInputKBytesSec() const { return m_webSocketInputRateKBytesSec; }
+    float webSocketInputKBytesSec() const;
     // Approximated Amount of data actually sent out on the TCP layer (the system
     // socket also has a buffer so writting on it doesn't exacly mean transmission as long
     // as it's not full)
-    float networkOutputKBytesSec() const { return m_networkOutputRateKBytesSec; }
+    float networkOutputKBytesSec() const;
+    qint64 pingTime_ms() const;
+
     virtual std::string name() const;
     virtual bool isReady() const;
 
     static constexpr int64_t BUFFER_SIZE_1000MB = 1E9;
+
+
 
 public slots:
     void onWSDisconnected();
@@ -76,4 +80,6 @@ private:
     float m_webSocketInputRateKBytesSec = 0;
     int64_t m_networkOutputBytes = 0;
     float m_networkOutputRateKBytesSec = 0;
+    qint64 m_lastPingTime_ms = 0;
+    void computeTransferRates();
 };

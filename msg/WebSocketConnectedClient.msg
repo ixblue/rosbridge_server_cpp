@@ -1,5 +1,7 @@
 string ip_address
 time connection_time
 
-float32 webSocketInputRateKBytesSec
-float32 networkOutputRateKBytesSec
+float32 websocket_input_rate_kbytes_sec
+float32 network_output_rate_kbytes_sec
+
+int32 ping_ms
