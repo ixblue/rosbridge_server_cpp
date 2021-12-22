@@ -15,6 +15,7 @@
 
 #include "nlohmann/json.hpp"
 
+#include <diagnostic_updater/diagnostic_updater.h>
 #include <ros/ros.h>
 #include <ros_babel_fish/babel_fish.h>
 
@@ -137,11 +138,13 @@ private:
                                 const rosbridge_protocol::SubscribeArgs& args);
 
     void publishStats() const;
+    void produceNetworkDiagnostics(diagnostic_updater::DiagnosticStatusWrapper& status);
 
     ros::NodeHandle m_nhPrivate{"~"};
     ros::NodeHandle m_nhNs;
     ros::Publisher m_clientsCountPub;
     ros::Publisher m_connectedClientsPub;
+    ros::Timer m_pubStatsTimer;
     std::map<std::string, ROSBridgePublisher> m_pubs;
     std::map<std::string, ROSBridgeSubscriber> m_subs;
     std::shared_ptr<ros_babel_fish::BabelFish> m_fish;
@@ -160,4 +163,10 @@ private:
     int m_wsPort = 9090;
     double m_serviceTimeout = 5.0;
     int m_maxWebSocketBufferSize_MB = 10;
+
+    // Diags
+    diagnostic_updater::Updater m_diagnostics;
+    ros::Timer m_diagTimer;
+    // Empty means no error
+    std::string m_clientErrorMsg = "";
 };

@@ -58,6 +58,14 @@ ROSNode::ROSNode(QObject* parent)
     connect(&m_wsServer, &QWebSocketServer::serverError, this, &ROSNode::onWSServerError);
 
     m_fish = std::make_shared<ros_babel_fish::BabelFish>();
+
+    m_diagnostics.add("Network", this, &ROSNode::produceNetworkDiagnostics);
+    m_diagnostics.setHardwareID("rosbridge");
+    m_diagTimer = m_nhPrivate.createTimer(
+        ros::Duration(1.0), [this](const ros::TimerEvent&) { m_diagnostics.update(); });
+
+    m_pubStatsTimer = m_nhPrivate.createTimer(
+        ros::Duration(10.0), [this](const ros::TimerEvent&) { publishStats(); });
 }
 
 void ROSNode::start()
@@ -549,6 +557,7 @@ void ROSNode::onWSClientDisconnected()
     const auto* client = qobject_cast<WSClient*>(sender());
 
     const auto clientName = client->name();
+    m_clientErrorMsg = client->errorMsg();
 
     for(auto pubIt = m_pubs.begin(); pubIt != m_pubs.end();)
     {
@@ -816,6 +825,25 @@ void ROSNode::publishStats() const
             msg.clients.push_back(c);
         }
         m_connectedClientsPub.publish(msg);
+    }
+}
+
+void ROSNode::produceNetworkDiagnostics(diagnostic_updater::DiagnosticStatusWrapper& status)
+{
+    status.add("Connected clients", m_clients.size());
+    auto network_output_kbytessec = 0.;
+    for(const auto& client : m_clients)
+    {
+        network_output_kbytessec += client->networkOutputKBytesSec();
+    }
+    status.add("Network output (KBytes/sec)", network_output_kbytessec);
+    if(m_clientErrorMsg.empty())
+    {
+        status.summary(diagnostic_msgs::DiagnosticStatus::OK, m_clientErrorMsg);
+    }
+    else
+    {
+        status.summary(diagnostic_msgs::DiagnosticStatus::WARN, m_clientErrorMsg);
     }
 }
 

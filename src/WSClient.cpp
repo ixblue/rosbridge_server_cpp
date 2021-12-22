@@ -96,11 +96,15 @@ bool WSClient::isReady() const
     return m_ws->isValid();
 }
 
+std::string WSClient::errorMsg() const
+{
+    return m_errorMsg;
+}
+
 void WSClient::onWSDisconnected()
 {
     ROS_DEBUG_STREAM_NAMED("websocket", "Client Disconnected");
     auto* client = qobject_cast<QWebSocket*>(sender());
-    m_socketBytesToWrite = 0;
     if((client != nullptr) && client == m_ws)
     {
         client->deleteLater();
@@ -123,6 +127,8 @@ void WSClient::abortConnection()
     // Cannot call disconnect because it requires the current buffer data to be fully sent
     // before trying to gently terminate the TCP connection. It needs to be stopped
     // immediatly to stop filling the buffer. This will trigger a disconnected signal.
+    m_errorMsg = "Connection to client " + ipAddress() +
+                 " has been aborted due to network performance issues.";
     m_ws->abort();
 }
 

@@ -35,10 +35,10 @@ public:
 
     virtual std::string name() const;
     virtual bool isReady() const;
+    // Returns an error msg if something wrong happened or an empty string otherwise.
+    std::string errorMsg() const;
 
-    static constexpr int64_t BUFFER_SIZE_1000MB = 1E9;
-
-
+    static constexpr int64_t DEFAULT_BUFFER_SIZE_1000MB = 1'000'000'000;
 
 public slots:
     void onWSDisconnected();
@@ -71,7 +71,8 @@ private:
     // RAM. This can be due to a disconnection / network freeze (TCP timeout will take a
     // long time to happen) or a client too slow to process the data or network congestion
     // (bandwidth too low / packet loss)
-    int64_t m_maxSocketBufferSize = BUFFER_SIZE_1000MB;
+    int64_t m_maxSocketBufferSize = DEFAULT_BUFFER_SIZE_1000MB;
+    std::string m_errorMsg;
 
     // Monitor bytes coming in and out of the socket and compute an averaged speed
     QTimer m_transferRateTimer;
