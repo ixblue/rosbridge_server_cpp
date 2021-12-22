@@ -8,12 +8,15 @@ add_compile_options(-Wall -Werror=return-type)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
-  librosqt
-  ros_babel_fish
-  roscpp
-  std_msgs
-)
+set(CATKIN_DEPS
+    librosqt
+    ros_babel_fish
+    roscpp
+    std_msgs
+    message_generation)
+find_package(catkin REQUIRED
+    ${CATKIN_DEPS}
+    )
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -26,6 +29,20 @@ if(CATKIN_ENABLE_TESTING AND ENABLE_COVERAGE_TESTING)
   # Add compiler flags for coverage instrumentation before defining any targets
   APPEND_COVERAGE_COMPILER_FLAGS()
 endif()
+
+## Generate messages in the 'msg' folder
+add_message_files(
+  FILES
+  WebSocketConnectedClient.msg
+  WebSocketConnectedClients.msg
+)
+
+## Generate added messages and services with any dependencies listed here
+ generate_messages(
+   DEPENDENCIES
+   std_msgs  # Or other packages containing msgs
+ )
+
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -44,7 +61,7 @@ endif()
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES p_rosbridge_server_cpp
-#  CATKIN_DEPENDS ros_babel_fish roscpp std_msgs
+    CATKIN_DEPENDS ${CATKIN_DEPS}
 #  DEPENDS system_lib
 )
 
@@ -106,6 +123,7 @@ target_link_libraries(${PROJECT_NAME}_node
   Qt5::WebSockets
   ${PROJECT_NAME}
 )
+add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 add_custom_target(readme SOURCES README.md)
 

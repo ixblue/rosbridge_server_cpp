@@ -1,0 +1,5 @@
+string ip_address
+time connection_time
+
+float32 webSocketInputRateKBytesSec
+float32 networkOutputRateKBytesSec

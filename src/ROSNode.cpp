@@ -9,7 +9,7 @@
 #include <QMetaObject>
 #include <QWebSocket>
 
-#include <rosbridge_msgs/ConnectedClients.h>
+#include <p_rosbridge_server_cpp/WebSocketConnectedClients.h>
 #include <std_msgs/Int32.h>
 #include <string>
 
@@ -50,7 +50,8 @@ ROSNode::ROSNode(QObject* parent)
 
     m_clientsCountPub = m_nhNs.advertise<std_msgs::Int32>("client_count", 10, true);
     m_connectedClientsPub =
-        m_nhNs.advertise<rosbridge_msgs::ConnectedClients>("connected_clients", 10, true);
+        m_nhNs.advertise<p_rosbridge_server_cpp::WebSocketConnectedClients>(
+            "connected_clients", 10, true);
 
     connect(&m_wsServer, &QWebSocketServer::newConnection, this,
             &ROSNode::onNewWSConnection);
@@ -802,13 +803,15 @@ void ROSNode::publishStats() const
         m_clientsCountPub.publish(msg);
     }
     {
-        rosbridge_msgs::ConnectedClients msg;
+        p_rosbridge_server_cpp::WebSocketConnectedClients msg;
         msg.clients.reserve(m_clients.size());
         for(const auto& client : m_clients)
         {
-            rosbridge_msgs::ConnectedClient c;
+            p_rosbridge_server_cpp::WebSocketConnectedClient c;
             c.ip_address = client->ipAddress();
             c.connection_time = client->connectionTime();
+            c.webSocketInputRateKBytesSec = client->webSocketInputKBytesSec();
+            c.networkOutputRateKBytesSec = client->networkOutputKBytesSec();
             msg.clients.push_back(c);
         }
         m_connectedClientsPub.publish(msg);
@@ -1034,5 +1037,4 @@ SubscriberClient::SubscriberClient(WSClient* wsClient, const rbp::SubscribeArgs&
     : client{wsClient}, queueSize{args.queueSize}, throttleRate_ms{args.throttleRate},
       fragmentSize{args.fragmentSize}, compression{args.compression},
       encoding{rosbridge_protocol::compressionToEncoding(args.compression)}
-{
-}
+{}

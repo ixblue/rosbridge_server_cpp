@@ -4,10 +4,28 @@
 
 #include "WSClient.h"
 
-WSClient::WSClient(QWebSocket* ws, int64_t max_socket_buffer_size_bytes)
+WSClient::WSClient(QWebSocket* ws, int64_t max_socket_buffer_size_bytes,
+                   int transferRateUpdatePeriod_ms)
     : QObject(nullptr), m_ws{ws}, m_connectionTime{ros::Time::now()},
-      m_maxSocketBufferSize{max_socket_buffer_size_bytes}
-{}
+      m_maxSocketBufferSize{max_socket_buffer_size_bytes},
+      m_transferRateUpdatePeriod_ms{transferRateUpdatePeriod_ms}
+{
+    m_transferRateTimer.setInterval(m_transferRateUpdatePeriod_ms);
+    m_transferRateTimer.setSingleShot(false);
+    connect(&m_transferRateTimer, &QTimer::timeout, this, [this]() {
+        auto MS_TO_SECS = 1 / 1000.;
+        auto input_kbytes = m_webSocketInputBytes / 1000.;
+        m_webSocketInputRateKBytesSec =
+            input_kbytes / (m_transferRateUpdatePeriod_ms * MS_TO_SECS);
+        // Reset counter for next update
+        m_webSocketInputBytes = 0;
+
+        auto output_kbytes = m_networkOutputBytes / 1000.;
+        m_webSocketInputRateKBytesSec =
+            output_kbytes / (m_networkOutputRateKBytesSec * MS_TO_SECS);
+    });
+    m_transferRateTimer.start();
+}
 
 WSClient::~WSClient()
 {
@@ -83,7 +101,8 @@ void WSClient::onWSBytesWritten(qint64 bytes)
 {
     // Called everytime bytes were removed from the internal QWebSocket buffer
     // to be written on the system socket.
-    m_socketBytesToWrite = std::max(static_cast<qint64>(0),m_socketBytesToWrite - bytes);
+    m_socketBytesToWrite = std::max(static_cast<qint64>(0), m_socketBytesToWrite - bytes);
+    m_networkOutputBytes += bytes;
 }
 
 void WSClient::abortConnection()
@@ -98,7 +117,9 @@ void WSClient::abortConnection()
 
 void WSClient::sendMsg(const QString& msg)
 {
-    m_socketBytesToWrite += m_ws->sendTextMessage(msg);
+    auto bytesInBuffer = m_ws->sendTextMessage(msg);
+    m_socketBytesToWrite += bytesInBuffer;
+    m_webSocketInputBytes += bytesInBuffer;
     if(m_socketBytesToWrite > m_maxSocketBufferSize)
     {
         abortConnection();
@@ -107,7 +128,9 @@ void WSClient::sendMsg(const QString& msg)
 
 void WSClient::sendBinaryMsg(const QByteArray& binaryMsg)
 {
-    m_socketBytesToWrite += m_ws->sendBinaryMessage(binaryMsg);
+    auto bytesInBuffer = m_ws->sendBinaryMessage(binaryMsg);
+    m_socketBytesToWrite += bytesInBuffer;
+    m_webSocketInputBytes += bytesInBuffer;
     if(m_socketBytesToWrite > m_maxSocketBufferSize)
     {
         abortConnection();
