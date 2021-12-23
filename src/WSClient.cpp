@@ -12,18 +12,7 @@ WSClient::WSClient(QWebSocket* ws, int64_t max_socket_buffer_size_bytes,
 {
     m_transferRateTimer.setInterval(m_transferRateUpdatePeriod_ms);
     m_transferRateTimer.setSingleShot(false);
-    connect(&m_transferRateTimer, &QTimer::timeout, this, [this]() {
-        auto MS_TO_SECS = 1 / 1000.;
-        auto input_kbytes = m_webSocketInputBytes / 1000.;
-        m_webSocketInputRateKBytesSec =
-            input_kbytes / (m_transferRateUpdatePeriod_ms * MS_TO_SECS);
-        // Reset counter for next update
-        m_webSocketInputBytes = 0;
-
-        auto output_kbytes = m_networkOutputBytes / 1000.;
-        m_webSocketInputRateKBytesSec =
-            output_kbytes / (m_networkOutputRateKBytesSec * MS_TO_SECS);
-    });
+    connect(&m_transferRateTimer, &QTimer::timeout, this, &WSClient::computeTransferRates);
     m_transferRateTimer.start();
 }
 
@@ -63,6 +52,21 @@ void WSClient::connectSignals()
 
     connect(&m_pingTimer, &QTimer::timeout, this, [this]() { m_ws->ping(); });
     m_pingTimer.start(2000);
+}
+
+void WSClient::computeTransferRates()
+{
+    static constexpr auto MS_TO_SECS = 1 / 1000.;
+    const auto input_kbytes = m_webSocketInputBytes / 1000.;
+    m_webSocketInputRateKBytesSec =
+        input_kbytes / (m_transferRateUpdatePeriod_ms * MS_TO_SECS);
+    // Reset counter for next update
+    m_webSocketInputBytes = 0;
+    const auto output_kbytes = m_networkOutputBytes / 1000.;
+    m_networkOutputRateKBytesSec =
+        output_kbytes / (m_transferRateUpdatePeriod_ms * MS_TO_SECS);
+    // Reset counter for next update
+    m_networkOutputBytes = 0;
 }
 
 std::string WSClient::ipAddress() const
@@ -116,8 +120,11 @@ void WSClient::onWSBytesWritten(qint64 bytes)
 {
     // Called everytime bytes were removed from the internal QWebSocket buffer
     // to be written on the system socket.
-    m_socketBytesToWrite = std::max(static_cast<qint64>(0), m_socketBytesToWrite - bytes);
-    m_networkOutputBytes += bytes;
+    // For some unknown Qt reasons, the bytesWritten signal is emitted twice so
+    // we need to devide by 2 to have the correct number.
+    auto correct_bytes = bytes / 2;
+    m_socketBytesToWrite = std::max(static_cast<qint64>(0), m_socketBytesToWrite - correct_bytes);
+    m_networkOutputBytes += correct_bytes;
 }
 
 void WSClient::abortConnection()
