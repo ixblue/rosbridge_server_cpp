@@ -57,6 +57,8 @@ private:
     QWebSocket* m_ws = nullptr;
     QTimer m_pingTimer;
     ros::Time m_connectionTime;
+
+#if QT_VERSION < QT_VERSION_CHECK(5, 12, 0)
     // Bytes contained in QWebSocket internal buffer waiting to be written
     // on the system socket to be effectively sent on the network.
     // If too much data is sent compared to network capacity, the internal buffer
@@ -65,7 +67,10 @@ private:
     // QWebSocket interface doesn't expose it directly: we compute and update it on our
     // own everytime we send data on the QWebSocket and everytime the data is removed from
     // the internal buffer See onWSBytesWritten()
+
+    // Starting with Qt5.12, can be accessed directly with bytesToWrite()
     int64_t m_socketBytesToWrite = 0;
+#endif
     // If the internal buffer goes over max, it means more data than a client is able to
     // receive is being sent and the connection will aborted to avoid consumming too much
     // RAM. This can be due to a disconnection / network freeze (TCP timeout will take a

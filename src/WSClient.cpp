@@ -120,11 +120,14 @@ void WSClient::onWSBytesWritten(qint64 bytes)
 {
     // Called everytime bytes were removed from the internal QWebSocket buffer
     // to be written on the system socket.
-    // For some unknown Qt reasons, the bytesWritten signal is emitted twice so
-    // we need to devide by 2 to have the correct number.
-    auto correct_bytes = bytes / 2;
-    m_socketBytesToWrite = std::max(static_cast<qint64>(0), m_socketBytesToWrite - correct_bytes);
-    m_networkOutputBytes += correct_bytes;
+    auto correctBytes = bytes;
+#if QT_VERSION < QT_VERSION_CHECK(5, 12, 0)
+    // For some unknown Qt reasons (bug), the bytesWritten signal is emitted twice so
+    // we need to divide by 2 to have the correct number.
+    correctBytes = bytes / 2;
+    m_socketBytesToWrite = std::max(static_cast<qint64>(0), m_socketBytesToWrite - correctBytes);
+#endif
+    m_networkOutputBytes += correctBytes;
 }
 
 void WSClient::abortConnection()
@@ -147,9 +150,13 @@ qint64 WSClient::pingTime_ms() const
 void WSClient::sendMsg(const QString& msg)
 {
     auto bytesInBuffer = m_ws->sendTextMessage(msg);
-    m_socketBytesToWrite += bytesInBuffer;
     m_webSocketInputBytes += bytesInBuffer;
+#if QT_VERSION < QT_VERSION_CHECK(5, 12, 0)
+    m_socketBytesToWrite += bytesInBuffer;
     if(m_socketBytesToWrite > m_maxSocketBufferSize)
+#else
+    if(m_ws->bytesToWrite() > m_maxSocketBufferSize)
+#endif
     {
         abortConnection();
     }
@@ -158,9 +165,14 @@ void WSClient::sendMsg(const QString& msg)
 void WSClient::sendBinaryMsg(const QByteArray& binaryMsg)
 {
     auto bytesInBuffer = m_ws->sendBinaryMessage(binaryMsg);
-    m_socketBytesToWrite += bytesInBuffer;
     m_webSocketInputBytes += bytesInBuffer;
+
+#if QT_VERSION < QT_VERSION_CHECK(5, 12, 0)
+    m_socketBytesToWrite += bytesInBuffer;
     if(m_socketBytesToWrite > m_maxSocketBufferSize)
+#else
+    if(m_ws->bytesToWrite() > m_maxSocketBufferSize)
+#endif
     {
         abortConnection();
     }
