@@ -1,34 +1,50 @@
-cmake_minimum_required(VERSION 3.1)
-project(p_rosbridge_server_cpp)
+cmake_minimum_required(VERSION 3.0.2)
+project(rosbridge_cpp_msgs)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_compile_options(-Wall -Werror=return-type)
+## Compile as C++11, supported in ROS Kinetic and newer
+# add_compile_options(-std=c++11)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-set(CATKIN_DEPS
-    librosqt
-    ros_babel_fish
-    roscpp
-    std_msgs
-    message_generation)
-find_package(catkin REQUIRED
-    ${CATKIN_DEPS}
-    )
+find_package(catkin REQUIRED COMPONENTS
+  message_generation
+  message_runtime
+  std_msgs
+)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
-set(CMAKE_AUTOMOC ON)
-find_package(Qt5 COMPONENTS Core Network WebSockets REQUIRED)
 
-if(CATKIN_ENABLE_TESTING AND ENABLE_COVERAGE_TESTING)
-  find_package(code_coverage REQUIRED)
-  # Add compiler flags for coverage instrumentation before defining any targets
-  APPEND_COVERAGE_COMPILER_FLAGS()
-endif()
+
+## Uncomment this if the package has a setup.py. This macro ensures
+## modules and global scripts declared therein get installed
+## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
+# catkin_python_setup()
+
+################################################
+## Declare ROS messages, services and actions ##
+################################################
+
+## To declare and build messages, services or actions from within this
+## package, follow these steps:
+## * Let MSG_DEP_SET be the set of packages whose message types you use in
+##   your messages/services/actions (e.g. std_msgs, actionlib_msgs, ...).
+## * In the file package.xml:
+##   * add a build_depend tag for "message_generation"
+##   * add a build_depend and a exec_depend tag for each package in MSG_DEP_SET
+##   * If MSG_DEP_SET isn't empty the following dependency has been pulled in
+##     but can be declared for certainty nonetheless:
+##     * add a exec_depend tag for "message_runtime"
+## * In this file (CMakeLists.txt):
+##   * add "message_generation" and every package in MSG_DEP_SET to
+##     find_package(catkin REQUIRED COMPONENTS ...)
+##   * add "message_runtime" and every package in MSG_DEP_SET to
+##     catkin_package(CATKIN_DEPENDS ...)
+##   * uncomment the add_*_files sections below as needed
+##     and list every .msg/.srv/.action file to be processed
+##   * uncomment the generate_messages entry below
+##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
 add_message_files(
@@ -37,17 +53,45 @@ add_message_files(
   WebSocketConnectedClients.msg
 )
 
+## Generate services in the 'srv' folder
+# add_service_files(
+#   FILES
+#   Service1.srv
+#   Service2.srv
+# )
+
+## Generate actions in the 'action' folder
+# add_action_files(
+#   FILES
+#   Action1.action
+#   Action2.action
+# )
+
 ## Generate added messages and services with any dependencies listed here
- generate_messages(
-   DEPENDENCIES
-   std_msgs  # Or other packages containing msgs
- )
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+)
 
+################################################
+## Declare ROS dynamic reconfigure parameters ##
+################################################
 
-## Uncomment this if the package has a setup.py. This macro ensures
-## modules and global scripts declared therein get installed
-## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
-# catkin_python_setup()
+## To declare and build dynamic reconfigure parameters within this
+## package, follow these steps:
+## * In the file package.xml:
+##   * add a build_depend and a exec_depend tag for "dynamic_reconfigure"
+## * In this file (CMakeLists.txt):
+##   * add "dynamic_reconfigure" to
+##     find_package(catkin REQUIRED COMPONENTS ...)
+##   * uncomment the "generate_dynamic_reconfigure_options" section below
+##     and list every .cfg file to be processed
+
+## Generate dynamic reconfigure parameters in the 'cfg' folder
+# generate_dynamic_reconfigure_options(
+#   cfg/DynReconf1.cfg
+#   cfg/DynReconf2.cfg
+# )
 
 ###################################
 ## catkin specific configuration ##
@@ -60,8 +104,8 @@ add_message_files(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES p_rosbridge_server_cpp
-    CATKIN_DEPENDS ${CATKIN_DEPS}
+#  LIBRARIES rosbridge_cpp_msgs
+#  CATKIN_DEPENDS message_generation message_runtime std_msgs
 #  DEPENDS system_lib
 )
 
@@ -74,24 +118,12 @@ catkin_package(
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
-  src
 )
 
 ## Declare a C++ library
-add_library(${PROJECT_NAME}
-    src/ROSNode.cpp
-    src/WSClient.cpp
-    src/ServiceCallerWithTimeout.cpp
-    src/rosbridge_protocol.cpp
-    src/ros_to_nlohmann.cpp
-    src/nlohmann_to_ros.cpp
-)
-target_link_libraries(${PROJECT_NAME}
-  ${catkin_LIBRARIES}
-  Qt5::Core
-  Qt5::Network
-  Qt5::WebSockets
-)
+# add_library(${PROJECT_NAME}
+#   src/${PROJECT_NAME}/rosbridge_cpp_msgs.cpp
+# )
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -101,9 +133,7 @@ target_link_libraries(${PROJECT_NAME}
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(${PROJECT_NAME}_node
-  src/p_rosbridge_server_cpp_node.cpp
-)
+# add_executable(${PROJECT_NAME}_node src/rosbridge_cpp_msgs_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -116,25 +146,9 @@ add_executable(${PROJECT_NAME}_node
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(${PROJECT_NAME}_node
-  ${catkin_LIBRARIES}
-  Qt5::Core
-  Qt5::Network
-  Qt5::WebSockets
-  ${PROJECT_NAME}
-)
-add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-add_custom_target(readme SOURCES README.md)
-
-file(GLOB_RECURSE LAUNCH_FILES "launch/*")
-add_custom_target(launch_files SOURCES ${LAUNCH_FILES})
-
-file(GLOB_RECURSE PYTHON_FILES "test/*.py")
-add_custom_target(python_test_files SOURCES ${PYTHON_FILES})
-
-file(GLOB_RECURSE ROSTEST_FILES "test/*.test")
-add_custom_target(rostest_files SOURCES ${ROSTEST_FILES})
+# target_link_libraries(${PROJECT_NAME}_node
+#   ${catkin_LIBRARIES}
+# )
 
 #############
 ## Install ##
@@ -152,11 +166,9 @@ add_custom_target(rostest_files SOURCES ${ROSTEST_FILES})
 
 ## Mark executables for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
-install(TARGETS ${PROJECT_NAME}_node ${PROJECT_NAME}
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
+# install(TARGETS ${PROJECT_NAME}_node
+#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+# )
 
 ## Mark libraries for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
@@ -180,41 +192,15 @@ install(TARGETS ${PROJECT_NAME}_node ${PROJECT_NAME}
 #   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 # )
 
-# launch files
-install(DIRECTORY
-  launch
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-)
-
 #############
 ## Testing ##
 #############
 
-if (CATKIN_ENABLE_TESTING)
-  # Add gtest based cpp test target and link libraries
-  catkin_add_gtest(ROSJsonConverterTest test/test_ros_json_converter.cpp)
-  if(TARGET ROSJsonConverterTest)
-    target_link_libraries(ROSJsonConverterTest ${PROJECT_NAME} ${catkin_LIBRARIES})
-  endif()
+## Add gtest based cpp test target and link libraries
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_rosbridge_cpp_msgs.cpp)
+# if(TARGET ${PROJECT_NAME}-test)
+#   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
+# endif()
 
-  find_package(rostest REQUIRED)
-  add_rostest(test/test_cbor_raw.test)
-  add_rostest(test/test_json_pub.test)
-
-  find_package(Qt5Test REQUIRED)
-
-  add_rostest_gtest(bridge_tester test/bridge_tester.test test/BridgeTester.cpp)
-  #catkin_add_gtest(bridge_tester test/BridgeTester.cpp)
-  target_link_libraries(bridge_tester ${PROJECT_NAME} ${catkin_LIBRARIES} Qt5::Test)
-
-  ## Add folders to be run by python nosetests
-  # catkin_add_nosetests(test)
-
-  if(ENABLE_COVERAGE_TESTING)
-    set(COVERAGE_EXCLUDES "*/${PROJECT_NAME}/test*" "*/${PROJECT_NAME}/src/nlohmann*")
-    add_code_coverage(
-      NAME ${PROJECT_NAME}_coverage_report
-      DEPENDENCIES ROSJsonConverterTest bridge_tester
-    )
-  endif()
-endif ()
+## Add folders to be run by python nosetests
+# catkin_add_nosetests(test)

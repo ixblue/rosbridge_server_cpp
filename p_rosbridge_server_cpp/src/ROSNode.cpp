@@ -9,7 +9,7 @@
 #include <QMetaObject>
 #include <QWebSocket>
 
-#include <p_rosbridge_server_cpp/WebSocketConnectedClients.h>
+#include <rosbridge_cpp_msgs/WebSocketConnectedClients.h>
 #include <std_msgs/Int32.h>
 #include <string>
 
@@ -50,7 +50,7 @@ ROSNode::ROSNode(QObject* parent)
 
     m_clientsCountPub = m_nhNs.advertise<std_msgs::Int32>("client_count", 10, true);
     m_connectedClientsPub =
-        m_nhNs.advertise<p_rosbridge_server_cpp::WebSocketConnectedClients>(
+        m_nhNs.advertise<rosbridge_cpp_msgs::WebSocketConnectedClients>(
             "connected_clients", 10, true);
 
     connect(&m_wsServer, &QWebSocketServer::newConnection, this,
@@ -812,11 +812,11 @@ void ROSNode::publishStats() const
         m_clientsCountPub.publish(msg);
     }
     {
-        p_rosbridge_server_cpp::WebSocketConnectedClients msg;
+        rosbridge_cpp_msgs::WebSocketConnectedClients msg;
         msg.clients.reserve(m_clients.size());
         for(const auto& client : m_clients)
         {
-            p_rosbridge_server_cpp::WebSocketConnectedClient c;
+            rosbridge_cpp_msgs::WebSocketConnectedClient c;
             c.ip_address = client->ipAddress();
             c.connection_time = client->connectionTime();
             c.websocket_input_rate_kbytes_sec = client->webSocketInputKBytesSec();
