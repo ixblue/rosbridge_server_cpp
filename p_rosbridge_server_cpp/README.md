@@ -53,7 +53,7 @@ Dans l'autre sens, à partir du JSON, les deux formats sont supportés. Tableau 
 - `roscpp`
 - `librosqt`
 - `ros_babel_fish`
-- `rosbridge_msgs`
+- `rosbridge_cpp_msgs`
 - `std_msgs`
 
 ## Paramètres optionels

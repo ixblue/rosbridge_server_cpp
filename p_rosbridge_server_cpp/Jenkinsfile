@@ -41,6 +41,7 @@ pipeline {
                     ansiColor('xterm') {
                         sh '''
                             . /opt/ros/$ROS_DISTRO/setup.sh
+                            export PYTHONIOENCODING=UTF-8
                             catkin init
                             catkin config --install --cmake-args -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS='-Wall' -DDISABLE_GUI:BOOL=ON -DCATKIN_ENABLE_TESTING=1
                             catkin build --no-status -j `nproc --ignore=2`
@@ -61,6 +62,7 @@ pipeline {
                     ansiColor('xterm') {
                         sh '''
                             . /opt/ros/$ROS_DISTRO/setup.sh
+                            export PYTHONIOENCODING=UTF-8
                             catkin run_tests --no-deps --this -j1
                         '''
                     }

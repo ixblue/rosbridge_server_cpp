@@ -602,7 +602,7 @@ TYPED_TEST(JSONTester, CanFillDiagnosticArrayFromJSON)
     {
         auto& status1 = status[0];
         const auto& es1 = expectedMsg.status[0];
-        EXPECT_EQ(status1["level"].value<uint8_t>(), es1.level);
+        EXPECT_EQ(status1["level"].value<int8_t>(), es1.level);
         EXPECT_EQ(status1["name"].value<std::string>(), es1.name);
         EXPECT_EQ(status1["message"].value<std::string>(), es1.message);
         // empty, not in JSON
@@ -619,7 +619,7 @@ TYPED_TEST(JSONTester, CanFillDiagnosticArrayFromJSON)
     {
         auto& status2 = status[1];
         const auto& es2 = expectedMsg.status[1];
-        EXPECT_EQ(status2["level"].value<uint8_t>(), es2.level);
+        EXPECT_EQ(status2["level"].value<int8_t>(), es2.level);
         EXPECT_EQ(status2["name"].value<std::string>(), es2.name);
         EXPECT_EQ(status2["message"].value<std::string>(), es2.message);
         EXPECT_EQ(status2["hardware_id"].value<std::string>(), es2.hardware_id);

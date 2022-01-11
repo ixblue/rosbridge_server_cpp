@@ -9,7 +9,7 @@
 #include <QMetaObject>
 #include <QWebSocket>
 
-#include <rosbridge_msgs/ConnectedClients.h>
+#include <rosbridge_cpp_msgs/WebSocketConnectedClients.h>
 #include <std_msgs/Int32.h>
 #include <string>
 
@@ -46,16 +46,26 @@ ROSNode::ROSNode(QObject* parent)
     // Parameters
     m_nhPrivate.getParam("port", m_wsPort);
     m_nhPrivate.getParam("service_timeout", m_serviceTimeout);
+    m_nhPrivate.getParam("max_wsocket_buffer_size_mbytes", m_maxWebSocketBufferSize_MB);
 
     m_clientsCountPub = m_nhNs.advertise<std_msgs::Int32>("client_count", 10, true);
     m_connectedClientsPub =
-        m_nhNs.advertise<rosbridge_msgs::ConnectedClients>("connected_clients", 10, true);
+        m_nhNs.advertise<rosbridge_cpp_msgs::WebSocketConnectedClients>(
+            "connected_clients", 10, true);
 
     connect(&m_wsServer, &QWebSocketServer::newConnection, this,
             &ROSNode::onNewWSConnection);
     connect(&m_wsServer, &QWebSocketServer::serverError, this, &ROSNode::onWSServerError);
 
     m_fish = std::make_shared<ros_babel_fish::BabelFish>();
+
+    m_diagnostics.add("Network", this, &ROSNode::produceNetworkDiagnostics);
+    m_diagnostics.setHardwareID("rosbridge");
+    m_diagTimer = m_nhPrivate.createTimer(
+        ros::Duration(1.0), [this](const ros::TimerEvent&) { m_diagnostics.update(); });
+
+    m_pubStatsTimer = m_nhPrivate.createTimer(
+        ros::Duration(10.0), [this](const ros::TimerEvent&) { publishStats(); });
 }
 
 void ROSNode::start()
@@ -547,6 +557,7 @@ void ROSNode::onWSClientDisconnected()
     const auto* client = qobject_cast<WSClient*>(sender());
 
     const auto clientName = client->name();
+    m_clientErrorMsg = client->errorMsg();
 
     for(auto pubIt = m_pubs.begin(); pubIt != m_pubs.end();)
     {
@@ -605,7 +616,8 @@ void ROSNode::onNewWSConnection()
                     << socket->peerAddress().toString().toStdString() << ":"
                     << socket->peerPort());
 
-    auto client = std::make_shared<WSClient>(socket);
+    const int64_t max_buffer_size_bytes = m_maxWebSocketBufferSize_MB * 1000 * 1000;
+    auto client = std::make_shared<WSClient>(socket, max_buffer_size_bytes);
     client->connectSignals();
     connect(client.get(), &WSClient::onWSMessage, this, &ROSNode::onWSMessage);
     connect(client.get(), &WSClient::onWSBinaryMessage, this, &ROSNode::onWSMessage);
@@ -800,16 +812,38 @@ void ROSNode::publishStats() const
         m_clientsCountPub.publish(msg);
     }
     {
-        rosbridge_msgs::ConnectedClients msg;
+        rosbridge_cpp_msgs::WebSocketConnectedClients msg;
         msg.clients.reserve(m_clients.size());
         for(const auto& client : m_clients)
         {
-            rosbridge_msgs::ConnectedClient c;
+            rosbridge_cpp_msgs::WebSocketConnectedClient c;
             c.ip_address = client->ipAddress();
             c.connection_time = client->connectionTime();
+            c.websocket_input_rate_kbytes_sec = client->webSocketInputKBytesSec();
+            c.network_output_rate_kbytes_sec = client->networkOutputKBytesSec();
+            c.ping_ms = client->pingTime_ms();
             msg.clients.push_back(c);
         }
         m_connectedClientsPub.publish(msg);
+    }
+}
+
+void ROSNode::produceNetworkDiagnostics(diagnostic_updater::DiagnosticStatusWrapper& status)
+{
+    status.add("Connected clients", m_clients.size());
+    auto network_output_kbytessec = 0.;
+    for(const auto& client : m_clients)
+    {
+        network_output_kbytessec += client->networkOutputKBytesSec();
+    }
+    status.add("Network output (KBytes/sec)", network_output_kbytessec);
+    if(m_clientErrorMsg.empty())
+    {
+        status.summary(diagnostic_msgs::DiagnosticStatus::OK, m_clientErrorMsg);
+    }
+    else
+    {
+        status.summary(diagnostic_msgs::DiagnosticStatus::WARN, m_clientErrorMsg);
     }
 }
 
@@ -1032,5 +1066,4 @@ SubscriberClient::SubscriberClient(WSClient* wsClient, const rbp::SubscribeArgs&
     : client{wsClient}, queueSize{args.queueSize}, throttleRate_ms{args.throttleRate},
       fragmentSize{args.fragmentSize}, compression{args.compression},
       encoding{rosbridge_protocol::compressionToEncoding(args.compression)}
-{
-}
+{}
