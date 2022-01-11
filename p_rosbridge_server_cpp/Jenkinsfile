@@ -15,7 +15,7 @@ pipeline {
                 }
                 dir('ws/src') {
                     sh """
-                        cp ${PACKAGE_NAME}/rosinstall .rosinstall
+                        cp ${PACKAGE_NAME}/${PACKAGE_NAME}/rosinstall .rosinstall
                         wstool update -j `nproc --ignore=2` || true
                     """
                 }
@@ -58,7 +58,7 @@ pipeline {
                 }
             }
             steps{
-                dir("ws/src/${PACKAGE_NAME}") {
+                dir("ws/src/${PACKAGE_NAME}/${PACKAGE_NAME}") {
                     ansiColor('xterm') {
                         sh '''
                             . /opt/ros/$ROS_DISTRO/setup.sh
