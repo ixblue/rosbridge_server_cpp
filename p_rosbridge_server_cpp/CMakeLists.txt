@@ -198,7 +198,7 @@ if (CATKIN_ENABLE_TESTING)
   # catkin_add_nosetests(test)
 
   if(ENABLE_COVERAGE_TESTING)
-    set(COVERAGE_EXCLUDES "*/${PROJECT_NAME}/test*" "*/${PROJECT_NAME}/src/nlohmann*")
+    set(COVERAGE_EXCLUDES "*/${PROJECT_NAME}/test*" "*/${PROJECT_NAME}/src/nlohmann*" "*/${PROJECT_NAME}_autogen/*" "*/bridge_tester_autogen/*")
     add_code_coverage(
       NAME ${PROJECT_NAME}_coverage_report
       DEPENDENCIES ROSJsonConverterTest bridge_tester

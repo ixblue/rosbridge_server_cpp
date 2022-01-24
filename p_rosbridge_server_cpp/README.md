@@ -1,5 +1,8 @@
 # `p_rosbridge_server_cpp`
 
+[![Build Status](https://jenkins.robopec.com/buildStatus/icon?job=p_rosbridge_server_cpp%2Fmaster)](https://jenkins.robopec.com/view/LIBS%20COMMON/job/p_rosbridge_server_cpp/job/master/)
+[![Coverage Status](https://jenkins.robopec.com/buildStatus/icon?job=p_rosbridge_server_cpp%2Fmaster&config=coverage)](https://jenkins.robopec.com/view/LIBS%20COMMON/job/p_rosbridge_server_cpp/job/master/LCOV_20Report/)
+
 Implémentation C++ d'un serveur Websocket du [protocole Rosbridge](https://github.com/RobotWebTools/rosbridge_suite/blob/develop/ROSBRIDGE_PROTOCOL.md).
 
 Il utilise Qt pour l'implémentation Websocket et donc dépend de `libqt5websockets5-dev`.

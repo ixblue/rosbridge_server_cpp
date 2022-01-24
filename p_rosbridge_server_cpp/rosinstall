@@ -2,4 +2,3 @@
     local-name: librosqt
     uri: ssh://git@git.robopec.com:7999/rob/librosqt.git
     version: master
-
