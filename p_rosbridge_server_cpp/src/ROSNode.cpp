@@ -93,16 +93,13 @@ ROSNode::encodeMsgToWireFormat(ros_babel_fish::BabelFish& fish,
     std::vector<uint8_t> cborVect;
     std::vector<uint8_t> cborRawVect;
 
-    nlohmann::json json{{"op", "publish"}, {"topic", topic}};
-
     if(toJson || toCbor)
     {
         const auto msgJson = ros_nlohmann_converter::toJson(fish, *msg);
-        auto j = json;
-        j["msg"] = msgJson;
+        const nlohmann::json j{{"op", "publish"}, {"topic", topic}, {"msg", msgJson}};
         if(toCbor)
         {
-            cborVect = nlohmann::json::to_cbor(j);
+            nlohmann::json::to_cbor(j, cborVect);
         }
         if(toJson)
         {
@@ -112,12 +109,15 @@ ROSNode::encodeMsgToWireFormat(ros_babel_fish::BabelFish& fish,
 
     if(toCborRaw)
     {
-        auto j = json;
         std::vector<uint8_t> data(msg->buffer(), msg->buffer() + msg->size());
         nlohmann::json::binary_t jsonBin{data};
-        j["msg"] = {
-            {"secs", receivedTime.sec}, {"nsecs", receivedTime.nsec}, {"bytes", jsonBin}};
-        cborRawVect = nlohmann::json::to_cbor(j);
+        const nlohmann::json j{{"op", "publish"},
+                               {"topic", topic},
+                               {"msg",
+                                {{"secs", receivedTime.sec},
+                                 {"nsecs", receivedTime.nsec},
+                                 {"bytes", jsonBin}}}};
+        nlohmann::json::to_cbor(j, cborRawVect);
     }
 
     return {jsonStr, cborVect, cborRawVect};
