@@ -20,6 +20,7 @@
 #include <std_msgs/Float64.h>
 #include <std_msgs/String.h>
 
+#include "ROSNode.h"
 #include "nlohmann_to_ros.h"
 #include "ros_to_nlohmann.h"
 
@@ -216,6 +217,14 @@ public:
                                      const ros_babel_fish::BabelFishMessage& msg) = 0;
 
     virtual std::string parseAndStringify(const std::string& jsonStr) = 0;
+
+    virtual std::string cborToJsonString(const std::vector<uint8_t>& cbor) = 0;
+
+    virtual std::vector<uint8_t>
+    getMsgBinaryFromCborRaw(const std::vector<uint8_t>& cbor) = 0;
+
+    virtual std::string
+    getJsonWithoutBytesFromCborRaw(const std::vector<uint8_t>& cbor) = 0;
 };
 
 class NlohmannJSONParser : public JSONParser<nlohmann::json>
@@ -249,6 +258,24 @@ public:
     std::string parseAndStringify(const std::string& jsonStr) override
     {
         return nlohmann::json::parse(jsonStr).dump();
+    }
+
+    std::string cborToJsonString(const std::vector<uint8_t>& cbor) override
+    {
+        return nlohmann::json::from_cbor(cbor).dump();
+    }
+
+    std::vector<uint8_t>
+    getMsgBinaryFromCborRaw(const std::vector<uint8_t>& cbor) override
+    {
+        return nlohmann::json::from_cbor(cbor)["msg"]["bytes"].get_binary();
+    }
+
+    std::string getJsonWithoutBytesFromCborRaw(const std::vector<uint8_t>& cbor) override
+    {
+        auto j = nlohmann::json::from_cbor(cbor);
+        j["msg"].erase("bytes");
+        return j.dump();
     }
 };
 
@@ -1322,6 +1349,117 @@ TYPED_TEST(JSONTester, CanConvertChannelFloat32WithNaNAndInfinityToJson)
     const auto expectedJson = R"({"name":"channel name","values":[1.0, null, null]})";
     const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
     EXPECT_EQ(json, expectedOutput);
+}
+
+/////////////////
+/// ROS to CBOR
+/////////////////
+
+TYPED_TEST(JSONTester, CanEncodePoseStampedToJson)
+{
+    ros_babel_fish::BabelFish fish;
+    geometry_msgs::PoseStamped msg;
+    fillMessage(msg);
+    const auto bfMsg =
+        boost::make_shared<ros_babel_fish::BabelFishMessage>(serializeMessage(fish, msg));
+
+    const auto [jsonStr, cborVect, cborRawVect] =
+        ROSNode::encodeMsgToWireFormat(fish, g_rosTime, "pos", bfMsg, true, false, false);
+
+    const auto expectedJson =
+        R"({"op":"publish","topic":"pos","msg":{"header":{"seq":0,"stamp":{"secs":34325435,"nsecs":432423},"frame_id":"robot"},"pose":{"position":{"x":1.0,"y":2.0,"z":3.0},"orientation":{"x":1.0,"y":2.0,"z":3.0,"w":4.0}}}})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+
+    EXPECT_EQ(jsonStr, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanEncodePoseStampedToCbor)
+{
+    ros_babel_fish::BabelFish fish;
+    geometry_msgs::PoseStamped msg;
+    fillMessage(msg);
+    const auto bfMsg =
+        boost::make_shared<ros_babel_fish::BabelFishMessage>(serializeMessage(fish, msg));
+
+    const auto [jsonStr, cborVect, cborRawVect] =
+        ROSNode::encodeMsgToWireFormat(fish, g_rosTime, "pos", bfMsg, false, true, false);
+
+    const auto expectedJson =
+        R"({"op":"publish","topic":"pos","msg":{"header":{"seq":0,"stamp":{"secs":34325435,"nsecs":432423},"frame_id":"robot"},"pose":{"position":{"x":1.0,"y":2.0,"z":3.0},"orientation":{"x":1.0,"y":2.0,"z":3.0,"w":4.0}}}})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+
+    const auto json = this->parser.cborToJsonString(cborVect);
+
+    EXPECT_EQ(json, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanEncodePoseStampedToCborRaw)
+{
+    ros_babel_fish::BabelFish fish;
+    geometry_msgs::PoseStamped msg;
+    fillMessage(msg);
+    const auto bfMsg =
+        boost::make_shared<ros_babel_fish::BabelFishMessage>(serializeMessage(fish, msg));
+
+    const auto [jsonStr, cborVect, cborRawVect] =
+        ROSNode::encodeMsgToWireFormat(fish, g_rosTime, "pos", bfMsg, false, false, true);
+
+    const auto expectedBinaryMsg =
+        std::vector<uint8_t>(bfMsg->buffer(), bfMsg->buffer() + bfMsg->size());
+
+    const auto binaryMsg = this->parser.getMsgBinaryFromCborRaw(cborRawVect);
+
+    EXPECT_EQ(binaryMsg, expectedBinaryMsg);
+
+    const auto jsonStrWithoutBytes =
+        this->parser.getJsonWithoutBytesFromCborRaw(cborRawVect);
+
+    const auto expectedJson =
+        R"({"op":"publish","topic":"pos","msg":{"secs":34325437,"nsecs":432427}})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+
+    EXPECT_EQ(jsonStrWithoutBytes, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanEncodePoseStampedToJsonAndCborAndCborRaw)
+{
+    ros_babel_fish::BabelFish fish;
+    geometry_msgs::PoseStamped msg;
+    fillMessage(msg);
+    const auto bfMsg =
+        boost::make_shared<ros_babel_fish::BabelFishMessage>(serializeMessage(fish, msg));
+
+    const auto [jsonStr, cborVect, cborRawVect] =
+        ROSNode::encodeMsgToWireFormat(fish, g_rosTime, "pos", bfMsg, true, true, true);
+
+    const auto expectedJson =
+        R"({"op":"publish","topic":"pos","msg":{"header":{"seq":0,"stamp":{"secs":34325435,"nsecs":432423},"frame_id":"robot"},"pose":{"position":{"x":1.0,"y":2.0,"z":3.0},"orientation":{"x":1.0,"y":2.0,"z":3.0,"w":4.0}}}})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+
+    // Test Json
+    {
+        EXPECT_EQ(jsonStr, expectedOutput);
+    }
+
+    // Test Cbor
+    {
+        const auto json = this->parser.cborToJsonString(cborVect);
+        EXPECT_EQ(json, expectedOutput);
+    }
+
+    // Test CborRaw
+    {
+        const auto expectedBinaryMsg =
+            std::vector<uint8_t>(bfMsg->buffer(), bfMsg->buffer() + bfMsg->size());
+        const auto binaryMsg = this->parser.getMsgBinaryFromCborRaw(cborRawVect);
+        EXPECT_EQ(binaryMsg, expectedBinaryMsg);
+        const auto jsonStrWithoutBytes =
+            this->parser.getJsonWithoutBytesFromCborRaw(cborRawVect);
+        const auto expectedJson =
+            R"({"op":"publish","topic":"pos","msg":{"secs":34325437,"nsecs":432427}})";
+        const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+        EXPECT_EQ(jsonStrWithoutBytes, expectedOutput);
+    }
 }
 
 //////////////////////////////////////////
