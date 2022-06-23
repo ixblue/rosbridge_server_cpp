@@ -648,6 +648,7 @@ void ROSNode::handleROSMessage(const std::string& topic,
         const bool toCbor = m_encodings.count(rbp::Encoding::CBOR) > 0;
         const bool toCborRaw = m_encodings.count(rbp::Encoding::CBOR_RAW) > 0;
         QElapsedTimer t;
+        t.start();
         auto [jsonStr, cborVect, cborRawVect] = encodeMsgToWireFormat(
             *m_fish, receivedTime, topic, msg, toJson, toCbor, toCborRaw);
 
