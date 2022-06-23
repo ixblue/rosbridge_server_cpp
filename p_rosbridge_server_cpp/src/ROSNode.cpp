@@ -94,10 +94,10 @@ ROSNode::encodeMsgToWireFormat(ros_babel_fish::BabelFish& fish,
     std::vector<uint8_t> cborRawVect;
 
     nlohmann::json json{{"op", "publish"}, {"topic", topic}};
-    auto msgJson = ros_nlohmann_converter::toJson(fish, *msg);
 
     if(toJson || toCbor)
     {
+        const auto msgJson = ros_nlohmann_converter::toJson(fish, *msg);
         auto j = json;
         j["msg"] = msgJson;
         if(toCbor)
