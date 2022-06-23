@@ -1324,6 +1324,105 @@ TYPED_TEST(JSONTester, CanConvertChannelFloat32WithNaNAndInfinityToJson)
     EXPECT_EQ(json, expectedOutput);
 }
 
+//////////////////////////////////////////
+/// MDT_MSGS
+/////////////////////////////////////////
+
+// Also uncomment the package mdt_msgs in package.xml and CMakeLists.txt
+//#define TEST_MDT_MSGS
+
+#ifdef TEST_MDT_MSGS
+
+#    include <mdt_msgs/StampedGeoTrackArray.h>
+
+TYPED_TEST(JSONTester, CanConvertEmptyStampedGeoTrackToJson)
+{
+    ros_babel_fish::BabelFish fish;
+    mdt_msgs::StampedGeoTrackArray msg;
+    auto bfMsg = serializeMessage(fish, msg);
+    const std::string json = this->parser.toJsonString(this->fish, bfMsg);
+
+    const auto expectedJson =
+        R"({"header":{"seq":0,"stamp":{"secs":0,"nsecs":0},"frame_id":""},"geo_tracks":[]})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanConvertStampedGeoTrackWithOneTrackAndNoAdditionalParamToJson)
+{
+    ros_babel_fish::BabelFish fish;
+    mdt_msgs::StampedGeoTrackArray msg;
+    msg.geo_tracks.resize(1);
+
+    auto bfMsg = serializeMessage(fish, msg);
+    const std::string json = this->parser.toJsonString(this->fish, bfMsg);
+
+    const auto expectedJson =
+        R"({"header":{"seq":0,"stamp":{"secs":0,"nsecs":0},"frame_id":""},"geo_tracks":[
+{
+  "header":{"seq":0,"stamp":{"secs":0,"nsecs":0},"frame_id":""},
+  "tracking_status": {
+    "status":0
+  },
+  "latitude":0.0,
+  "longitude":0.0,
+  "cog":0.0,
+  "sog":0.0,
+  "is_speed_reliable":false,
+  "age":0.0,
+  "sigmaE":0.0,
+  "sigmaN":0.0,
+  "sigmaEN":0.0,
+  "trackID":0,
+  "confidence":0.0,
+  "additionalParameter":[]
+}
+]})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanConvertStampedGeoTrackWithOneTrackAndOneAdditionalParamToJson)
+{
+    ros_babel_fish::BabelFish fish;
+    mdt_msgs::StampedGeoTrackArray msg;
+    msg.geo_tracks.resize(1);
+    msg.geo_tracks[0].additionalParameter.resize(1);
+    msg.geo_tracks[0].additionalParameter[0].key = "a";
+    msg.geo_tracks[0].additionalParameter[0].value = "b";
+
+    auto bfMsg = serializeMessage(fish, msg);
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
+
+    const auto expectedJson =
+        R"({"header":{"seq":0,"stamp":{"secs":0,"nsecs":0},"frame_id":""},"geo_tracks":[
+{
+  "header":{"seq":0,"stamp":{"secs":0,"nsecs":0},"frame_id":""},
+  "tracking_status": {
+    "status":0
+  },
+  "latitude":0.0,
+  "longitude":0.0,
+  "cog":0.0,
+  "sog":0.0,
+  "is_speed_reliable":false,
+  "age":0.0,
+  "sigmaE":0.0,
+  "sigmaN":0.0,
+  "sigmaEN":0.0,
+  "trackID":0,
+  "confidence":0.0,
+  "additionalParameter":[
+    {"key": "a","value": "b"}
+  ]
+}
+]})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
+
+#endif // TEST_MDT_MSGS
+
 int main(int argc, char** argv)
 {
     ::testing::InitGoogleTest(&argc, argv);

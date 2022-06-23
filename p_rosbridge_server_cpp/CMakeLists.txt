@@ -13,6 +13,7 @@ set(CATKIN_DEPS
     ros_babel_fish
     roscpp
     std_msgs
+#    mdt_msgs
     rosbridge_cpp_msgs)
 find_package(catkin REQUIRED
     ${CATKIN_DEPS}

@@ -67,6 +67,8 @@
   <exec_depend>rosbridge_cpp_msgs</exec_depend>
   <exec_depend>message_runtime</exec_depend>
 
+  <!--depend>mdt_msgs</depend-->
+
   <!-- The export tag contains other, unspecified, tags -->
   <export>
     <!-- Other tools can request additional information be placed here -->
