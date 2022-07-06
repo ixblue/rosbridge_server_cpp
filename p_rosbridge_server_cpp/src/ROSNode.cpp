@@ -621,7 +621,13 @@ void ROSNode::onNewWSConnection()
     client->connectSignals();
     connect(client.get(), &WSClient::onWSMessage, this, &ROSNode::onWSMessage);
     connect(client.get(), &WSClient::onWSBinaryMessage, this, &ROSNode::onWSMessage);
-    connect(client.get(), &WSClient::disconected, this, &ROSNode::onWSClientDisconnected);
+
+    // Disconnection is handled with a QueuedConnection to be delayed later.
+    // In case of an abort on the WebSocket (buffer full), the WSClient will be removed
+    // will we might be iterating on the list of clients in handleROSMessage() and
+    // erasing an element of a vector invalidates the iterators
+    connect(client.get(), &WSClient::disconected, this, &ROSNode::onWSClientDisconnected,
+            Qt::QueuedConnection);
 
     m_clients.push_back(client);
 
@@ -666,6 +672,10 @@ void ROSNode::handleROSMessage(const std::string& topic,
                 it->second.lastMessageReceivedTime = receivedTime;
             }
 
+            // Warning, the sendTopicToClient() call can trigger an abort operation on the
+            // Websocket, and then remove a client while we are looping on the clients
+            // Thus, the onWSClientDisconnected() method is connected to a queued
+            // connection to delete it later
             for(const auto& client : it->second.clients)
             {
                 if(client->client->isReady())
