@@ -123,7 +123,6 @@ void WSClient::onWSDisconnected()
     auto* client = qobject_cast<QWebSocket*>(sender());
     if((client != nullptr) && client == m_ws)
     {
-        client->deleteLater();
         emit disconected();
     }
 }
