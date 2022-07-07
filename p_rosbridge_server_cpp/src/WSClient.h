@@ -57,6 +57,7 @@ private:
     QWebSocket* m_ws = nullptr;
     QTimer m_pingTimer;
     ros::Time m_connectionTime;
+    std::string m_name = "Not yet connected";
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 12, 0)
     // Bytes contained in QWebSocket internal buffer waiting to be written

@@ -1,3 +1,5 @@
+#include <cassert>
+
 #include <QWebSocket>
 
 #include <ros/console.h>
@@ -19,11 +21,17 @@ WSClient::WSClient(QWebSocket* ws, int64_t max_socket_buffer_size_bytes,
 WSClient::~WSClient()
 {
     ROS_DEBUG_STREAM("~WSClient " << name());
-    m_ws->deleteLater();
+    if(m_ws != nullptr)
+    {
+        m_ws->deleteLater();
+    }
 }
 
 void WSClient::connectSignals()
 {
+    m_name = m_ws->peerAddress().toString().toStdString() + ":" +
+             std::to_string(m_ws->peerPort());
+
     connect(m_ws, &QWebSocket::textMessageReceived, this, &WSClient::onWSMessage);
     connect(m_ws, &QWebSocket::binaryMessageReceived, this, &WSClient::onWSBinaryMessage);
     connect(m_ws, &QWebSocket::disconnected, this, &WSClient::onWSDisconnected);
@@ -71,6 +79,7 @@ void WSClient::computeTransferRates()
 
 std::string WSClient::ipAddress() const
 {
+    assert(m_ws != nullptr);
     return m_ws->peerAddress().toString().toStdString();
 }
 
@@ -91,13 +100,16 @@ float WSClient::networkOutputKBytesSec() const
 
 std::string WSClient::name() const
 {
-    return m_ws->peerAddress().toString().toStdString() + ":" +
-           std::to_string(m_ws->peerPort());
+    return m_name;
 }
 
 bool WSClient::isReady() const
 {
-    return m_ws->isValid();
+    if(m_ws != nullptr)
+    {
+        return m_ws->isValid();
+    }
+    return false;
 }
 
 std::string WSClient::errorMsg() const
@@ -111,7 +123,6 @@ void WSClient::onWSDisconnected()
     auto* client = qobject_cast<QWebSocket*>(sender());
     if((client != nullptr) && client == m_ws)
     {
-        client->deleteLater();
         emit disconected();
     }
 }
@@ -132,6 +143,7 @@ void WSClient::onWSBytesWritten(qint64 bytes)
 
 void WSClient::abortConnection()
 {
+    assert(m_ws != nullptr);
     ROS_ERROR_STREAM("Internal websocket buffer is full for client "
                      << ipAddress() << ". Connection aborted");
     // Cannot call disconnect because it requires the current buffer data to be fully sent
@@ -149,6 +161,7 @@ qint64 WSClient::pingTime_ms() const
 
 void WSClient::sendMsg(const QString& msg)
 {
+    assert(m_ws != nullptr);
     auto bytesInBuffer = m_ws->sendTextMessage(msg);
     m_webSocketInputBytes += bytesInBuffer;
 #if QT_VERSION < QT_VERSION_CHECK(5, 12, 0)
@@ -164,6 +177,7 @@ void WSClient::sendMsg(const QString& msg)
 
 void WSClient::sendBinaryMsg(const QByteArray& binaryMsg)
 {
+    assert(m_ws != nullptr);
     auto bytesInBuffer = m_ws->sendBinaryMessage(binaryMsg);
     m_webSocketInputBytes += bytesInBuffer;
 
