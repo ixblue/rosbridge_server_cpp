@@ -16,9 +16,6 @@ WSClient::WSClient(QWebSocket* ws, int64_t max_socket_buffer_size_bytes,
     m_transferRateTimer.setSingleShot(false);
     connect(&m_transferRateTimer, &QTimer::timeout, this, &WSClient::computeTransferRates);
     m_transferRateTimer.start();
-
-    m_name = m_ws->peerAddress().toString().toStdString() + ":" +
-             std::to_string(m_ws->peerPort());
 }
 
 WSClient::~WSClient()
@@ -32,6 +29,9 @@ WSClient::~WSClient()
 
 void WSClient::connectSignals()
 {
+    m_name = m_ws->peerAddress().toString().toStdString() + ":" +
+             std::to_string(m_ws->peerPort());
+
     connect(m_ws, &QWebSocket::textMessageReceived, this, &WSClient::onWSMessage);
     connect(m_ws, &QWebSocket::binaryMessageReceived, this, &WSClient::onWSBinaryMessage);
     connect(m_ws, &QWebSocket::disconnected, this, &WSClient::onWSDisconnected);
