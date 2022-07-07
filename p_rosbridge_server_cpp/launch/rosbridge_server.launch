@@ -3,7 +3,7 @@
   <env name="ROSCONSOLE_CONFIG_FILE" value="$(find p_rosbridge_server_cpp)/launch/rosconsole.config" />
 
   <arg name="port" default="9090" />
-  <arg name="with_rosapi"/>
+  <arg name="with_rosapi" default="false" />
 
   <node name="p_rosbridge_server_cpp" pkg="p_rosbridge_server_cpp" type="p_rosbridge_server_cpp_node" output="screen">
     <param name="port" value="$(arg port)"/>

@@ -19,9 +19,10 @@ class WSClient : public QObject
     Q_OBJECT
 public:
     explicit WSClient(QWebSocket* ws, int64_t max_socket_buffer_size_bytes,
-                      int transferRateUpdatePeriod_ms = 1000);
+                      int transferRateUpdatePeriod_ms, double pong_timeout_seconds);
     virtual ~WSClient();
     void connectSignals();
+    void onPingTimer();
 
     std::string ipAddress() const;
     ros::Time connectionTime() const;
@@ -89,4 +90,8 @@ private:
     float m_networkOutputRateKBytesSec = 0;
     qint64 m_lastPingTime_ms = 0;
     void computeTransferRates();
+
+    // variables for timeout calculation
+    ros::SteadyTime m_lastPongReceivedStamp;
+    ros::WallDuration m_pongReceiveTimeout;
 };

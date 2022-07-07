@@ -163,6 +163,7 @@ private:
     int m_wsPort = 9090;
     double m_serviceTimeout = 5.0;
     int m_maxWebSocketBufferSize_MB = 1000;
+    double m_pongTimeout_s = 30.;
 
     // Diags
     diagnostic_updater::Updater m_diagnostics;
