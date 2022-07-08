@@ -96,14 +96,16 @@ ROSNode::encodeMsgToWireFormat(ros_babel_fish::BabelFish& fish,
 
     if(toJson || toCbor)
     {
-        const auto msgJson = ros_nlohmann_converter::toJson(fish, *msg);
-        const nlohmann::json j{{"op", "publish"}, {"topic", topic}, {"msg", msgJson}};
         if(toCbor)
         {
+            const auto msgJson = ros_nlohmann_converter::toBinaryJson(fish, *msg);
+            const nlohmann::json j{{"op", "publish"}, {"topic", topic}, {"msg", msgJson}};
             nlohmann::json::to_cbor(j, cborVect);
         }
         if(toJson)
         {
+            const auto msgJson = ros_nlohmann_converter::toJson(fish, *msg);
+            const nlohmann::json j{{"op", "publish"}, {"topic", topic}, {"msg", msgJson}};
             jsonStr = j.dump();
         }
     }
@@ -398,10 +400,12 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
              serviceName = args.serviceName, client, serviceClient]() {
                 auto res = serviceClient->getResponse();
 
-                nlohmann::json responseJson =
-                    ros_nlohmann_converter::translatedMsgtoJson(*res->translated_message);
-
                 const auto encoding = rbp::compressionToEncoding(compression);
+
+                nlohmann::json responseJson = ros_nlohmann_converter::translatedMsgtoJson(
+                    *res->translated_message,
+                    encoding == rosbridge_protocol::Encoding::CBOR ? true : false);
+
                 const auto [json, cbor, cborRaw] = encodeServiceResponseToWireFormat(
                     serviceName, id, responseJson, true, encoding);
                 sendMsgToClient(client, json, cbor, cborRaw, encoding);
