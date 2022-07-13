@@ -47,6 +47,7 @@ ROSNode::ROSNode(QObject* parent)
     m_nhPrivate.getParam("port", m_wsPort);
     m_nhPrivate.getParam("service_timeout", m_serviceTimeout);
     m_nhPrivate.getParam("max_wsocket_buffer_size_mbytes", m_maxWebSocketBufferSize_MB);
+    m_nhPrivate.getParam("pong_timeout_s", m_pongTimeout_s);
 
     m_clientsCountPub = m_nhNs.advertise<std_msgs::Int32>("client_count", 10, true);
     m_connectedClientsPub =
@@ -617,7 +618,8 @@ void ROSNode::onNewWSConnection()
                     << socket->peerPort());
 
     const int64_t max_buffer_size_bytes = m_maxWebSocketBufferSize_MB * 1000 * 1000;
-    auto client = std::make_shared<WSClient>(socket, max_buffer_size_bytes);
+    auto client =
+        std::make_shared<WSClient>(socket, max_buffer_size_bytes, 1000, m_pongTimeout_s);
     client->connectSignals();
     connect(client.get(), &WSClient::onWSMessage, this, &ROSNode::onWSMessage);
     connect(client.get(), &WSClient::onWSBinaryMessage, this, &ROSNode::onWSMessage);

@@ -7,20 +7,19 @@
 #include "WSClient.h"
 
 WSClient::WSClient(QWebSocket* ws, int64_t max_socket_buffer_size_bytes,
-                   int transferRateUpdatePeriod_ms)
+                   int transferRateUpdatePeriod_ms, double pong_timeout_seconds)
     : QObject(nullptr), m_ws{ws}, m_connectionTime{ros::Time::now()},
       m_maxSocketBufferSize{max_socket_buffer_size_bytes},
-      m_transferRateUpdatePeriod_ms{transferRateUpdatePeriod_ms}
+      m_transferRateUpdatePeriod_ms{transferRateUpdatePeriod_ms},
+      m_pongReceiveTimeout{pong_timeout_seconds}
 {
     m_transferRateTimer.setInterval(m_transferRateUpdatePeriod_ms);
     m_transferRateTimer.setSingleShot(false);
-    connect(&m_transferRateTimer, &QTimer::timeout, this, &WSClient::computeTransferRates);
-    m_transferRateTimer.start();
+    m_lastPongReceivedStamp = ros::SteadyTime::now();
 }
 
 WSClient::~WSClient()
 {
-    ROS_DEBUG_STREAM("~WSClient " << name());
     if(m_ws != nullptr)
     {
         m_ws->deleteLater();
@@ -47,6 +46,7 @@ void WSClient::connectSignals()
             [this](quint64 elapsedTime, const QByteArray& payload) {
                 Q_UNUSED(payload)
                 m_lastPingTime_ms = elapsedTime;
+                m_lastPongReceivedStamp = ros::SteadyTime::now();
                 ROS_DEBUG_STREAM_NAMED("websocket",
                                        "Pong received with round-trip time of "
                                            << elapsedTime << " ms");
@@ -58,8 +58,33 @@ void WSClient::connectSignals()
                                        "State changed to: " << static_cast<int>(state));
             });
 
-    connect(&m_pingTimer, &QTimer::timeout, this, [this]() { m_ws->ping(); });
+    connect(&m_transferRateTimer, &QTimer::timeout, this,
+            &WSClient::computeTransferRates);
+    m_transferRateTimer.start();
+
+    connect(&m_pingTimer, &QTimer::timeout, this, [this]() { onPingTimer(); });
     m_pingTimer.start(2000);
+}
+
+void WSClient::onPingTimer()
+{
+    assert(m_ws != nullptr);
+    m_ws->ping();
+
+    ros::WallDuration durationSincePong =
+        ros::SteadyTime::now() - m_lastPongReceivedStamp;
+
+    if(durationSincePong > m_pongReceiveTimeout)
+    {
+        ROS_ERROR_STREAM("Websocket client " << ipAddress()
+                                             << " timed out. Connection aborted");
+        // Cannot call disconnect because it requires the current buffer data to be fully
+        // sent before trying to gently terminate the TCP connection. It needs to be
+        // stopped immediatly to stop filling the buffer. This will trigger a disconnected
+        // signal.
+        m_errorMsg = "Connection to client " + ipAddress() + " timed out.";
+        m_ws->abort();
+    }
 }
 
 void WSClient::computeTransferRates()

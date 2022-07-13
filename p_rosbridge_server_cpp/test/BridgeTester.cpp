@@ -19,7 +19,8 @@ class MockWSClient : public WSClient
 {
     Q_OBJECT
 public:
-    MockWSClient() : WSClient{nullptr, WSClient::DEFAULT_BUFFER_SIZE_1000MB} {}
+    MockWSClient() : WSClient{nullptr, WSClient::DEFAULT_BUFFER_SIZE_1000MB, 1000, 10.0}
+    {}
 
     void sendMsg(const QString& msg) override { m_lastSentTextMsgs.push_back(msg); }
     void sendBinaryMsg(const QByteArray& msg) override { m_lastSentBinaryMsg = msg; }

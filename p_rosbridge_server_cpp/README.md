@@ -63,6 +63,7 @@ Dans l'autre sens, à partir du JSON, les deux formats sont supportés. Tableau 
 
 - `port` (*int*) : Port de la websocket. La valeur 0 conduit à ce que l'OS donne un port (défaut = `9090`)
 - `service_timeout` (*double*) : Durée du timeout pour les appels de services en secondes (défaut = `5.0`)
+- `pong_timeout_s` (*double*) : Durée de timeout, en secondes, avant que l'on déconnecte le client (défaut = `30.0`)
 
 ## Paramètres set par le nœud
 
