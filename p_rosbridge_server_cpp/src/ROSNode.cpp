@@ -182,6 +182,11 @@ std::string ROSNode::getMandatoryNotEmptyStringFromJson(const nlohmann::json& js
     throw std::runtime_error(ss.str());
 }
 
+void ROSNode::SetServiceCallTimeout(double timeout)
+{
+    m_serviceTimeout = timeout;
+}
+
 void ROSNode::advertise(WSClient* client, const rbp::AdvertiseArgs& args)
 {
     if(const auto it = m_pubs.find(args.topic); it != m_pubs.end())
@@ -365,6 +370,13 @@ void ROSNode::unsubscribe(WSClient* client, const rbp::UnsubscribeArgs& args)
 
 void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
 {
+    if(client == nullptr)
+    {
+        ROS_ERROR_STREAM_NAMED("service",
+                               "called service with nullptr client");
+        return;
+    }
+
     ROS_INFO_STREAM_NAMED("service", "Call service " << args.serviceName);
     try
     {
@@ -377,73 +389,47 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
         auto serviceClient = new ServiceCallerWithTimeout(m_fish, args.serviceName, req,
                                                           m_serviceTimeout, this);
 
-        connect(serviceClient, &ServiceCallerWithTimeout::success, this,
-                [this, id = args.id, compression = args.compression,
-                 serviceName = args.serviceName, client]() {
-                    auto* serviceClientCaller =
-                        qobject_cast<ServiceCallerWithTimeout*>(sender());
-                    if(client != nullptr)
-                    {
-                        auto res = serviceClientCaller->getResponse();
-
-                        nlohmann::json responseJson =
-                            ros_nlohmann_converter::translatedMsgtoJson(
-                                *res->translated_message);
-
-                        const auto encoding = rbp::compressionToEncoding(compression);
-                        const auto [json, cbor, cborRaw] =
-                            encodeServiceResponseToWireFormat(
-                                serviceName, id, responseJson, true, encoding);
-                        sendMsgToClient(client, json, cbor, cborRaw, encoding);
-                    }
-                    else
-                    {
-                        ROS_ERROR_STREAM_NAMED("service",
-                                               "Received response for service "
-                                                   << serviceName
-                                                   << " but client ptr is now null");
-                    }
-
-                    // Disconnect allows to drop all copies of serviceClient shared_ptr
-                    serviceClientCaller->disconnect();
-                });
+        // establish the qt connection on the WSClient context : if the connection is
+        // deleted it will be disconnected automatically
 
         connect(
-            serviceClient, &ServiceCallerWithTimeout::error, this,
-            [this, id = args.id, compression = args.compression, client,
-             serviceName = args.serviceName](const QString& errorMsg) {
-                if(client != nullptr)
-                {
+            serviceClient, &ServiceCallerWithTimeout::success, client,
+            [this, id = args.id, compression = args.compression,
+             serviceName = args.serviceName, client, serviceClient]() {
+                auto res = serviceClient->getResponse();
+
+                nlohmann::json responseJson =
+                    ros_nlohmann_converter::translatedMsgtoJson(*res->translated_message);
+
+                const auto encoding = rbp::compressionToEncoding(compression);
+                const auto [json, cbor, cborRaw] = encodeServiceResponseToWireFormat(
+                    serviceName, id, responseJson, true, encoding);
+                sendMsgToClient(client, json, cbor, cborRaw, encoding);
+            });
+
+        connect(serviceClient, &ServiceCallerWithTimeout::error, client,
+                [this, id = args.id, compression = args.compression, client,
+                 serviceName = args.serviceName](const QString& errorMsg) {
                     const auto encoding = rbp::compressionToEncoding(compression);
                     const auto [json, cbor, cborRaw] = encodeServiceResponseToWireFormat(
                         serviceName, id, {errorMsg.toStdString()}, false, encoding);
                     sendMsgToClient(client, json, cbor, cborRaw, encoding);
 
                     sendStatus(client, rbp::StatusLevel::Error, errorMsg.toStdString());
-                }
+                });
 
-                // Disconnect allows to drop all copies of serviceClient shared_ptr
-                sender()->disconnect();
-            });
-        connect(serviceClient, &ServiceCallerWithTimeout::timeout, this,
+        connect(serviceClient, &ServiceCallerWithTimeout::timeout, client,
                 [this, id = args.id, compression = args.compression, client,
                  serviceName = args.serviceName]() {
-                    if(client != nullptr)
-                    {
-                        std::ostringstream ss;
-                        ss << "Service " << serviceName << " call timeout";
+                    std::ostringstream ss;
+                    ss << "Service " << serviceName << " call timeout";
 
-                        const auto encoding = rbp::compressionToEncoding(compression);
-                        const auto [json, cbor, cborRaw] =
-                            encodeServiceResponseToWireFormat(serviceName, id, {ss.str()},
-                                                              false, encoding);
-                        sendMsgToClient(client, json, cbor, cborRaw, encoding);
+                    const auto encoding = rbp::compressionToEncoding(compression);
+                    const auto [json, cbor, cborRaw] = encodeServiceResponseToWireFormat(
+                        serviceName, id, {ss.str()}, false, encoding);
+                    sendMsgToClient(client, json, cbor, cborRaw, encoding);
 
-                        sendStatus(client, rbp::StatusLevel::Error, ss.str());
-                    }
-
-                    // Disconnect allows to drop all copies of serviceClient shared_ptr
-                    sender()->disconnect();
+                    sendStatus(client, rbp::StatusLevel::Error, ss.str());
                 });
 
         serviceClient->call();

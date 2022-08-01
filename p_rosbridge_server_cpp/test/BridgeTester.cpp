@@ -4,6 +4,7 @@
 #include <librosqt/QRosCallBackQueue.h>
 #include <std_msgs/String.h>
 #include <std_srvs/SetBool.h>
+#include <thread>
 
 #include "ROSNode.h"
 #include "WSClient.h"
@@ -682,6 +683,203 @@ void BridgeTester::canCallAServiceJSON()
     const auto jsonStr =
         nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString()).dump();
     QCOMPARE(jsonStr, expectedJsonStr);
+}
+
+void BridgeTester::canCallAServiceJSONWithError()
+{
+    ros::NodeHandle nh;
+    bool serviceHasBeenCalled = false;
+    bool serviceReq = false;
+    ros::ServiceServer service =
+        nh.advertiseService<std_srvs::SetBoolRequest, std_srvs::SetBoolResponse>(
+            "/set_bool",
+            [&serviceHasBeenCalled, &serviceReq](std_srvs::SetBoolRequest& req,
+                                                 std_srvs::SetBoolResponse& res) {
+                serviceHasBeenCalled = true;
+                serviceReq = req.data;
+                res.success = false;
+                return false;
+            });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        R"({"op":"call_service","service":"/set_bool","type":"std_srvs/SetBool","args":{"data":true}})");
+
+    QTest::qWait(40);
+
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 2UL);
+
+    QVERIFY(serviceHasBeenCalled);
+    QVERIFY(serviceReq);
+
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJsonStr =
+        R"({"op":"service_response","service":"/set_bool","values":["Failed to call service /set_bool"],"result":false})"_json
+            .dump();
+    const auto jsonStr =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString()).dump();
+
+    // std::cout << "res : " << client->m_lastSentTextMsgs.at(0).toStdString() <<
+    // std::endl;
+
+    QCOMPARE(jsonStr, expectedJsonStr);
+}
+
+void BridgeTester::canCallAServiceJSONWithTimeout()
+{
+    ros::CallbackQueue async_cb_queue;
+    ros::AsyncSpinner ros_async_spinner(1, &async_cb_queue);
+    ros::NodeHandle nh;
+    nh.setCallbackQueue(&async_cb_queue);
+    ros_async_spinner.start();
+
+    std::atomic<bool> serviceHasBeenCalled = false;
+    std::atomic<bool> serviceReq = false;
+    ros::ServiceServer service =
+        nh.advertiseService<std_srvs::SetBoolRequest, std_srvs::SetBoolResponse>(
+            "/set_bool",
+            [&serviceHasBeenCalled, &serviceReq](std_srvs::SetBoolRequest& req,
+                                                 std_srvs::SetBoolResponse& res) {
+                serviceHasBeenCalled = true;
+                serviceReq = req.data;
+                res.success = false;
+
+                usleep(1000000); // wait 1 sec
+
+                return true;
+            });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    node.SetServiceCallTimeout(0.100);
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        R"({"op":"call_service","service":"/set_bool","type":"std_srvs/SetBool","args":{"data":true}})");
+
+    QTest::qWait(40);
+
+    QVERIFY(serviceHasBeenCalled);
+    QVERIFY(serviceReq);
+
+    // make sure we received the timeout
+    QTest::qWait(100);
+
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJsonStr =
+        R"({"op":"service_response","service":"/set_bool","values":["Service /set_bool call timeout"],"result":false})"_json
+            .dump();
+    const auto jsonStr =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString()).dump();
+    QCOMPARE(jsonStr, expectedJsonStr);
+
+    // if nothing has crashed, shutdown properly
+    ros_async_spinner.stop();
+}
+
+void BridgeTester::canCallAServiceJSONWithErrorAfterDisconnect()
+{
+    ros::CallbackQueue async_cb_queue;
+    ros::AsyncSpinner ros_async_spinner(1, &async_cb_queue);
+    ros::NodeHandle nh;
+    nh.setCallbackQueue(&async_cb_queue);
+    ros_async_spinner.start();
+
+    std::atomic<bool> serviceHasBeenCalled = false;
+    std::atomic<bool> serviceReq = false;
+    ros::ServiceServer service =
+        nh.advertiseService<std_srvs::SetBoolRequest, std_srvs::SetBoolResponse>(
+            "/set_bool",
+            [&serviceHasBeenCalled, &serviceReq](std_srvs::SetBoolRequest& req,
+                                                 std_srvs::SetBoolResponse& res) {
+                serviceHasBeenCalled = true;
+                serviceReq = req.data;
+                res.success = false;
+
+                usleep(100000); // wait 100 msecs
+
+                return false;
+            });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    node.SetServiceCallTimeout(5.0);
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        R"({"op":"call_service","service":"/set_bool","type":"std_srvs/SetBool","args":{"data":true}})");
+
+    QTest::qWait(40);
+
+    QVERIFY(serviceHasBeenCalled);
+    QVERIFY(serviceReq);
+
+    // destroy client
+    client->deleteLater();
+    QTest::qWait(100);
+
+    // if nothing has crashed, shutdown properly
+    ros_async_spinner.stop();
+}
+
+void BridgeTester::canCallAServiceWithDisconnectDuringTimeout()
+{
+    ros::CallbackQueue async_cb_queue;
+    ros::AsyncSpinner ros_async_spinner(1, &async_cb_queue);
+    ros::NodeHandle nh;
+    nh.setCallbackQueue(&async_cb_queue);
+    ros_async_spinner.start();
+
+    std::atomic<bool> serviceHasBeenCalled = false;
+    std::atomic<bool> serviceReq = false;
+    ros::ServiceServer service =
+        nh.advertiseService<std_srvs::SetBoolRequest, std_srvs::SetBoolResponse>(
+            "/set_bool",
+            [&serviceHasBeenCalled, &serviceReq](std_srvs::SetBoolRequest& req,
+                                                 std_srvs::SetBoolResponse& res) {
+                serviceHasBeenCalled = true;
+                serviceReq = req.data;
+                res.success = false;
+
+                usleep(1000000); // wait 1 sec
+
+                return true;
+            });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    node.SetServiceCallTimeout(0.100);
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        R"({"op":"call_service","service":"/set_bool","type":"std_srvs/SetBool","args":{"data":true}})");
+
+    QTest::qWait(40);
+
+    QVERIFY(serviceHasBeenCalled);
+    QVERIFY(serviceReq);
+
+    // destroy client
+    client->deleteLater();
+    QTest::qWait(200);
+
+    // if nothing has crashed, shutdown properly
+    ros_async_spinner.stop();
 }
 
 void BridgeTester::canCallAServiceWithId()
