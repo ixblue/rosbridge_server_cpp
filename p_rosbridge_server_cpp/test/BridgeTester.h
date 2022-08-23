@@ -24,6 +24,10 @@ private slots:
     void cannotUnadvertiseATopicNotAdvertised();
     void canChangeStatusLevel();
     void canCallAServiceJSON();
+    void canCallAServiceJSONWithError();
+    void canCallAServiceJSONWithTimeout();
+    void canCallAServiceWithDisconnectDuringTimeout();
+    void canCallAServiceJSONWithErrorAfterDisconnect();
     void canCallAServiceWithId();
     void canCallAServiceCBOR();
     void cannotCallAServiceWithBadJSON();

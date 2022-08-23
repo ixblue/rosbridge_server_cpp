@@ -81,6 +81,8 @@ public:
     static std::string getMandatoryNotEmptyStringFromJson(const nlohmann::json& json,
                                                           const std::string& key);
 
+    void SetServiceCallTimeout(double timeout);
+
 public slots:
     void onWSMessage(const QString& message);
     void onWSBinaryMessage(const QByteArray& message) const;
