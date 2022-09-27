@@ -94,7 +94,7 @@ nlohmann::json translatedMsgtoJson(const ros_babel_fish::Message& message, bool 
                 break;
             default:
                 throw std::runtime_error(
-                    "unimplemented cbor elementType : this is a programming error");
+                    "unimplemented cbor elementType: this is a programming error");
                 break;
             }
         }

@@ -389,7 +389,7 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
         auto serviceClient = new ServiceCallerWithTimeout(m_fish, args.serviceName, req,
                                                           m_serviceTimeout, this);
 
-        // establish the qt connection on the WSClient context : if the connection is
+        // establish the qt connection on the WSClient context: if the connection is
         // deleted it will be disconnected automatically
 
         connect(
@@ -402,7 +402,7 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
 
                 nlohmann::json responseJson = ros_nlohmann_converter::translatedMsgtoJson(
                     *res->translated_message,
-                    encoding == rosbridge_protocol::Encoding::CBOR ? true : false);
+                    encoding == rosbridge_protocol::Encoding::CBOR);
 
                 const auto [json, cbor, cborRaw] = encodeServiceResponseToWireFormat(
                     serviceName, id, responseJson, true, encoding);
