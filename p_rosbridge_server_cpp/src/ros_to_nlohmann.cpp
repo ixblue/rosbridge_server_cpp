@@ -39,7 +39,7 @@ getJsonArrayFromBabelFishArray(const ros_babel_fish::ArrayMessageBase& base)
     out.reserve(base.length());
     for(size_t i = 0; i < base.length(); ++i)
     {
-        out.push_back(static_cast<OT>(base.as<ros_babel_fish::ArrayMessage<IT>>()[i]));
+        out.emplace_back(static_cast<OT>(base.as<ros_babel_fish::ArrayMessage<IT>>()[i]));
     }
     return out;
 }
@@ -78,7 +78,7 @@ getTimeJsonArrayFromBabelFishArray(const ros_babel_fish::ArrayMessageBase& base)
     for(size_t i = 0; i < base.length(); ++i)
     {
         const auto t = base.as<ros_babel_fish::ArrayMessage<T>>()[i];
-        outArray.push_back(getJsonFromTimeOrDuration(t));
+        outArray.emplace_back(getJsonFromTimeOrDuration(t));
     }
     return outArray;
 }
