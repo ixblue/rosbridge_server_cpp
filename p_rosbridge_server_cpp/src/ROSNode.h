@@ -150,7 +150,6 @@ private:
     std::map<std::string, ROSBridgePublisher> m_pubs;
     std::map<std::string, ROSBridgeSubscriber> m_subs;
     std::shared_ptr<ros_babel_fish::BabelFish> m_fish;
-    std::set<rosbridge_protocol::Encoding> m_encodings;
     QWebSocketServer m_wsServer{QStringLiteral("rosbridge server"),
                                 QWebSocketServer::NonSecureMode};
     std::vector<std::shared_ptr<WSClient>> m_clients;

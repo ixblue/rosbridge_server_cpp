@@ -96,14 +96,16 @@ ROSNode::encodeMsgToWireFormat(ros_babel_fish::BabelFish& fish,
 
     if(toJson || toCbor)
     {
-        const auto msgJson = ros_nlohmann_converter::toJson(fish, *msg);
-        const nlohmann::json j{{"op", "publish"}, {"topic", topic}, {"msg", msgJson}};
         if(toCbor)
         {
+            const auto msgJson = ros_nlohmann_converter::toBinaryJson(fish, *msg);
+            const nlohmann::json j{{"op", "publish"}, {"topic", topic}, {"msg", msgJson}};
             nlohmann::json::to_cbor(j, cborVect);
         }
         if(toJson)
         {
+            const auto msgJson = ros_nlohmann_converter::toJson(fish, *msg);
+            const nlohmann::json j{{"op", "publish"}, {"topic", topic}, {"msg", msgJson}};
             jsonStr = j.dump();
         }
     }
@@ -301,7 +303,6 @@ void ROSNode::udapteSubscriberClient(SubscriberClient& c, const rbp::SubscribeAr
     c.queueSize = std::min(c.queueSize, args.queueSize);
     c.compression = args.compression;
     c.encoding = rbp::compressionToEncoding(args.compression);
-    m_encodings.insert(c.encoding);
 }
 
 void ROSNode::subscribe(WSClient* client, const rbp::SubscribeArgs& args)
@@ -324,7 +325,6 @@ void ROSNode::subscribe(WSClient* client, const rbp::SubscribeArgs& args)
             ROS_DEBUG_STREAM("Add a new client subscribed on topic " << args.topic);
             subClient = std::make_shared<SubscriberClient>(client, args);
             it->second.clients.push_back(subClient);
-            m_encodings.insert(subClient->encoding);
         }
 
         // If the topic is latched, send the last message directly to the new client
@@ -372,8 +372,7 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
 {
     if(client == nullptr)
     {
-        ROS_ERROR_STREAM_NAMED("service",
-                               "called service with nullptr client");
+        ROS_ERROR_STREAM_NAMED("service", "called service with nullptr client");
         return;
     }
 
@@ -389,23 +388,25 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
         auto serviceClient = new ServiceCallerWithTimeout(m_fish, args.serviceName, req,
                                                           m_serviceTimeout, this);
 
-        // establish the qt connection on the WSClient context : if the connection is
+        // establish the qt connection on the WSClient context: if the connection is
         // deleted it will be disconnected automatically
 
-        connect(
-            serviceClient, &ServiceCallerWithTimeout::success, client,
-            [this, id = args.id, compression = args.compression,
-             serviceName = args.serviceName, client, serviceClient]() {
-                auto res = serviceClient->getResponse();
+        connect(serviceClient, &ServiceCallerWithTimeout::success, client,
+                [this, id = args.id, compression = args.compression,
+                 serviceName = args.serviceName, client, serviceClient]() {
+                    auto res = serviceClient->getResponse();
 
-                nlohmann::json responseJson =
-                    ros_nlohmann_converter::translatedMsgtoJson(*res->translated_message);
+                    const auto encoding = rbp::compressionToEncoding(compression);
 
-                const auto encoding = rbp::compressionToEncoding(compression);
-                const auto [json, cbor, cborRaw] = encodeServiceResponseToWireFormat(
-                    serviceName, id, responseJson, true, encoding);
-                sendMsgToClient(client, json, cbor, cborRaw, encoding);
-            });
+                    nlohmann::json responseJson =
+                        ros_nlohmann_converter::translatedMsgtoJson(
+                            *res->translated_message,
+                            encoding == rosbridge_protocol::Encoding::CBOR);
+
+                    const auto [json, cbor, cborRaw] = encodeServiceResponseToWireFormat(
+                        serviceName, id, responseJson, true, encoding);
+                    sendMsgToClient(client, json, cbor, cborRaw, encoding);
+                });
 
         connect(serviceClient, &ServiceCallerWithTimeout::error, client,
                 [this, id = args.id, compression = args.compression, client,
@@ -638,17 +639,6 @@ void ROSNode::handleROSMessage(const std::string& topic,
         ROS_DEBUG_STREAM_ONCE("Received ROS msg on topic " << topic);
         ROS_DEBUG_STREAM_NAMED("topic", "Handle ROS msg on topic "
                                             << topic << " latched: " << msg->isLatched());
-        const bool toJson = m_encodings.count(rbp::Encoding::JSON) > 0;
-        const bool toCbor = m_encodings.count(rbp::Encoding::CBOR) > 0;
-        const bool toCborRaw = m_encodings.count(rbp::Encoding::CBOR_RAW) > 0;
-        QElapsedTimer t;
-        t.start();
-        auto [jsonStr, cborVect, cborRawVect] = encodeMsgToWireFormat(
-            *m_fish, receivedTime, topic, msg, toJson, toCbor, toCborRaw);
-
-        ROS_DEBUG_STREAM_NAMED("topic", "Converted ROS msg on topic "
-                                            << topic << " to wire format(s) in "
-                                            << t.nsecsElapsed() / 1000 << " us");
 
         if(const auto it = m_subs.find(topic); it != m_subs.end())
         {
@@ -659,6 +649,32 @@ void ROSNode::handleROSMessage(const std::string& topic,
                 it->second.lastMessage = msg;
                 it->second.lastMessageReceivedTime = receivedTime;
             }
+
+            // find used encodings
+            bool toJson = false;
+            bool toCbor = false;
+            bool toCborRaw = false;
+            for(const auto& client : it->second.clients)
+            {
+                switch(client->encoding)
+                {
+                case rosbridge_protocol::Encoding::JSON: toJson = true; break;
+                case rosbridge_protocol::Encoding::CBOR: toCbor = true; break;
+                case rosbridge_protocol::Encoding::CBOR_RAW: toCborRaw = true; break;
+                default: throw std::runtime_error("unhandled encoding"); break;
+                }
+            }
+
+            // convert message to used encodings
+            QElapsedTimer convertTimer;
+            convertTimer.start();
+            auto [jsonStr, cborVect, cborRawVect] = encodeMsgToWireFormat(
+                *m_fish, receivedTime, topic, msg, toJson, toCbor, toCborRaw);
+
+            ROS_DEBUG_STREAM_NAMED("topic", "Converted ROS msg on topic "
+                                                << topic << " to wire format(s) in "
+                                                << convertTimer.nsecsElapsed() / 1000
+                                                << " us");
 
             // Warning, the sendTopicToClient() call can trigger an abort operation on the
             // Websocket, and then remove a client while we are looping on the clients
@@ -797,7 +813,6 @@ void ROSNode::addNewSubscriberClient(WSClient* client,
         });
 
     sub.clients.push_back(std::make_shared<SubscriberClient>(client, args));
-    m_encodings.insert(sub.clients.back()->encoding);
     m_subs.emplace(args.topic, std::move(sub));
     ROS_DEBUG_STREAM("Subscribe to a new topic " << args.topic);
 }
@@ -827,7 +842,8 @@ void ROSNode::publishStats() const
     }
 }
 
-void ROSNode::produceNetworkDiagnostics(diagnostic_updater::DiagnosticStatusWrapper& status)
+void ROSNode::produceNetworkDiagnostics(
+    diagnostic_updater::DiagnosticStatusWrapper& status)
 {
     status.add("Connected clients", m_clients.size());
     auto network_output_kbytessec = 0.;

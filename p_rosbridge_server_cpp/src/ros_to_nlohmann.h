@@ -8,7 +8,10 @@
 
 namespace ros_nlohmann_converter
 {
-nlohmann::json translatedMsgtoJson(const ros_babel_fish::Message& message);
+nlohmann::json translatedMsgtoJson(const ros_babel_fish::Message& message,
+                                   bool useBinary);
 nlohmann::json toJson(ros_babel_fish::BabelFish& fish,
                       const ros_babel_fish::BabelFishMessage& msg);
+nlohmann::json toBinaryJson(ros_babel_fish::BabelFish& fish,
+                            const ros_babel_fish::BabelFishMessage& msg);
 } // namespace ros_nlohman_converter

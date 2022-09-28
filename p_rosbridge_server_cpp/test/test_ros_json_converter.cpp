@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdio>
 #include <limits>
 
 #include <gtest/gtest.h>
@@ -27,6 +28,39 @@
 static const ros::Time g_rosTime{34325437, 432427};
 
 // Helper functions to fill ROS msgs
+
+std::string UInt8VecToHexString(const std::vector<uint8_t>& in)
+{
+    std::string out;
+    out.reserve(in.size() * 3);
+    char buf[4] = "   ";
+    for(const uint8_t& b : in)
+    {
+        std::snprintf(buf, 4, "%02x ", b);
+        out.push_back(buf[0]);
+        out.push_back(buf[1]);
+        out.push_back(buf[2]);
+    }
+    return out;
+}
+
+std::string UInt8VecToCppVect(const std::vector<uint8_t>& in)
+{
+    std::string out;
+    out.reserve(in.size() * 6 + 4);
+    out += "{ ";
+    char buf[10] = "";
+    for(const uint8_t& b : in)
+    {
+        int count = std::snprintf(buf, 10, "0x%02x, ", b);
+        if(count > 0)
+        {
+            out += buf;
+        }
+    }
+    out += " }";
+    return out;
+}
 
 void fillMessage(geometry_msgs::Pose& m)
 {
@@ -163,7 +197,7 @@ void fillMessage(sensor_msgs::Image& m)
     std::iota(m.data.begin(), m.data.end(), 0);
 }
 
-void fillMessage(sensor_msgs::CompressedImage& m)
+void fillMessage(sensor_msgs::CompressedImage& m, size_t size = 10)
 {
     m.header.stamp.sec = 123;
     m.header.stamp.nsec = 456;
@@ -171,7 +205,7 @@ void fillMessage(sensor_msgs::CompressedImage& m)
     m.header.seq = 123;
 
     m.format = "jpeg";
-    m.data.resize(10);
+    m.data.resize(size);
     std::iota(m.data.begin(), m.data.end(), 0);
 }
 
@@ -339,9 +373,9 @@ TYPED_TEST(JSONTester, CanFillPoseStampedMsgFromJson)
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
     EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(), "robot");
-    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 2);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 34325435);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 432423);
+    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 2u);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 34325435u);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 432423u);
     EXPECT_EQ(compound["pose"]["position"]["x"].value<double>(), 5.6);
     EXPECT_EQ(compound["pose"]["position"]["y"].value<double>(), 6.7);
     EXPECT_EQ(compound["pose"]["position"]["z"].value<double>(), 7.8);
@@ -382,9 +416,9 @@ TYPED_TEST(JSONTester, CanFillOdometryMsgFromJson)
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
     EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(), "robot");
-    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 2);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 34325435);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 432423);
+    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 2u);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 34325435u);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 432423u);
 
     EXPECT_EQ(compound["child_frame_id"].value<std::string>(), "child_frame");
 
@@ -452,9 +486,9 @@ TYPED_TEST(JSONTester, CanFillPointStampedMsgFromJsonWithHeaderMissing)
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
     EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(), "");
-    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 0);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 34325437);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 432427);
+    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 0u);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 34325437u);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 432427u);
     EXPECT_EQ(compound["point"]["x"].value<double>(), 5.6);
     EXPECT_EQ(compound["point"]["y"].value<double>(), 6.7);
     EXPECT_EQ(compound["point"]["z"].value<double>(), 7.8);
@@ -474,9 +508,9 @@ TYPED_TEST(JSONTester, CanFillPointStampedMsgFromJsonWithStampMissing)
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
     EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(), "robot");
-    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 2);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 34325437);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 432427);
+    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 2u);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 34325437u);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 432427u);
     EXPECT_EQ(compound["point"]["x"].value<double>(), 5.6);
     EXPECT_EQ(compound["point"]["y"].value<double>(), 6.7);
     EXPECT_EQ(compound["point"]["z"].value<double>(), 7.8);
@@ -496,9 +530,9 @@ TYPED_TEST(JSONTester, CanFillPointStampedMsggFromJsonWithStampMissing)
     auto& compound =
         translated->translated_message->as<ros_babel_fish::CompoundMessage>();
     EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(), "robot");
-    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 2);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 34325437);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 432427);
+    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 2u);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 34325437u);
+    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 432427u);
     EXPECT_EQ(compound["point"]["x"].value<double>(), 5.6);
     EXPECT_EQ(compound["point"]["y"].value<double>(), 6.7);
     EXPECT_EQ(compound["point"]["z"].value<double>(), 7.8);
@@ -1365,12 +1399,83 @@ TYPED_TEST(JSONTester, CanEncodePoseStampedToJson)
 
     const auto [jsonStr, cborVect, cborRawVect] =
         ROSNode::encodeMsgToWireFormat(fish, g_rosTime, "pos", bfMsg, true, false, false);
+    (void)cborRawVect;
+    (void)cborVect;
 
     const auto expectedJson =
         R"({"op":"publish","topic":"pos","msg":{"header":{"seq":0,"stamp":{"secs":34325435,"nsecs":432423},"frame_id":"robot"},"pose":{"position":{"x":1.0,"y":2.0,"z":3.0},"orientation":{"x":1.0,"y":2.0,"z":3.0,"w":4.0}}}})";
     const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
 
     EXPECT_EQ(jsonStr, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanEncodeImageToCbor)
+{
+    ros_babel_fish::BabelFish fish;
+    sensor_msgs::Image msg;
+    fillMessage(msg);
+    const auto bfMsg =
+        boost::make_shared<ros_babel_fish::BabelFishMessage>(serializeMessage(fish, msg));
+
+    const auto [jsonStr, cborVect, cborRawVect] = ROSNode::encodeMsgToWireFormat(
+        fish, g_rosTime, "image", bfMsg, false, true, false);
+    (void)jsonStr;
+    (void)cborRawVect;
+
+    const auto expectedJson =
+        R"({"op":"publish","topic":"image","msg":{"data":{"bytes":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,14,15,16,17],"subtype":null},"encoding":"bgr8","header":{"frame_id":"frame_id","seq":123,"stamp":{"nsecs":456,"secs":123}},"height":3,"is_bigendian":0,"step":6,"width":2}})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+
+    const auto json = this->parser.cborToJsonString(cborVect);
+
+    // std::cout << "cbor string: " << UInt8VecToHexString(cborVect) << "\n";
+    // std::cout << "cbor string: " << UInt8VecToCppVect(cborVect) << "\n";
+
+    EXPECT_EQ(json, expectedOutput);
+
+    /*
+     using https://cbor.me, the following byte array represent this CBor file:
+        from cbor RFC specs, h() means byte string
+
+     {"msg": {"data": h'000102030405060708090A0B0C0D0E0F10110E0F1011', "encoding": "bgr8",
+     "header":
+        {"frame_id": "frame_id", "seq": 123, "stamp": {"nsecs": 456, "secs": 123}},
+     "height": 3, "is_bigendian": 0, "step": 6, "width": 2}, "op": "publish", "topic":
+     "image"}
+     */
+    static std::vector<uint8_t> expectedCborVect = {
+        0xa3, 0x63, 0x6d, 0x73, 0x67, 0xa7, 0x64, 0x64, 0x61, 0x74, 0x61, 0x56, 0x00,
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+        0x0e, 0x0f, 0x10, 0x11, 0x0e, 0x0f, 0x10, 0x11, 0x68, 0x65, 0x6e, 0x63, 0x6f,
+        0x64, 0x69, 0x6e, 0x67, 0x64, 0x62, 0x67, 0x72, 0x38, 0x66, 0x68, 0x65, 0x61,
+        0x64, 0x65, 0x72, 0xa3, 0x68, 0x66, 0x72, 0x61, 0x6d, 0x65, 0x5f, 0x69, 0x64,
+        0x68, 0x66, 0x72, 0x61, 0x6d, 0x65, 0x5f, 0x69, 0x64, 0x63, 0x73, 0x65, 0x71,
+        0x18, 0x7b, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0xa2, 0x65, 0x6e, 0x73, 0x65,
+        0x63, 0x73, 0x19, 0x01, 0xc8, 0x64, 0x73, 0x65, 0x63, 0x73, 0x18, 0x7b, 0x66,
+        0x68, 0x65, 0x69, 0x67, 0x68, 0x74, 0x03, 0x6c, 0x69, 0x73, 0x5f, 0x62, 0x69,
+        0x67, 0x65, 0x6e, 0x64, 0x69, 0x61, 0x6e, 0x00, 0x64, 0x73, 0x74, 0x65, 0x70,
+        0x06, 0x65, 0x77, 0x69, 0x64, 0x74, 0x68, 0x02, 0x62, 0x6f, 0x70, 0x67, 0x70,
+        0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x65, 0x74, 0x6f, 0x70, 0x69, 0x63, 0x65,
+        0x69, 0x6d, 0x61, 0x67, 0x65};
+
+    EXPECT_EQ(cborVect, expectedCborVect);
+}
+
+TYPED_TEST(JSONTester, CanEncodeBigCompressedImageToCbor)
+{
+    ros_babel_fish::BabelFish fish;
+    sensor_msgs::CompressedImage msg;
+    fillMessage(msg, 100000);
+    const auto bfMsg =
+        boost::make_shared<ros_babel_fish::BabelFishMessage>(serializeMessage(fish, msg));
+
+    const auto [jsonStr, cborVect, cborRawVect] = ROSNode::encodeMsgToWireFormat(
+        fish, g_rosTime, "image", bfMsg, false, true, false);
+    (void)jsonStr;
+    (void)cborRawVect;
+
+    // 110 cbor bytes fixed overhead (also used for topic info etc.)
+    EXPECT_EQ(cborVect.size(), 100110u);
 }
 
 TYPED_TEST(JSONTester, CanEncodePoseStampedToCbor)
@@ -1383,6 +1488,8 @@ TYPED_TEST(JSONTester, CanEncodePoseStampedToCbor)
 
     const auto [jsonStr, cborVect, cborRawVect] =
         ROSNode::encodeMsgToWireFormat(fish, g_rosTime, "pos", bfMsg, false, true, false);
+    (void)jsonStr;
+    (void)cborRawVect;
 
     const auto expectedJson =
         R"({"op":"publish","topic":"pos","msg":{"header":{"seq":0,"stamp":{"secs":34325435,"nsecs":432423},"frame_id":"robot"},"pose":{"position":{"x":1.0,"y":2.0,"z":3.0},"orientation":{"x":1.0,"y":2.0,"z":3.0,"w":4.0}}}})";
@@ -1403,6 +1510,8 @@ TYPED_TEST(JSONTester, CanEncodePoseStampedToCborRaw)
 
     const auto [jsonStr, cborVect, cborRawVect] =
         ROSNode::encodeMsgToWireFormat(fish, g_rosTime, "pos", bfMsg, false, false, true);
+    (void)jsonStr;
+    (void)cborVect;
 
     const auto expectedBinaryMsg =
         std::vector<uint8_t>(bfMsg->buffer(), bfMsg->buffer() + bfMsg->size());
@@ -1467,7 +1576,7 @@ TYPED_TEST(JSONTester, CanEncodePoseStampedToJsonAndCborAndCborRaw)
 /////////////////////////////////////////
 
 // Also uncomment the package mdt_msgs in package.xml and CMakeLists.txt
-//#define TEST_MDT_MSGS
+// #define TEST_MDT_MSGS
 
 #ifdef TEST_MDT_MSGS
 
