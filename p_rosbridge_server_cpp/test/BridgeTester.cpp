@@ -11,6 +11,7 @@
 #include "nlohmann/json.hpp"
 
 #include "BridgeTester.h"
+#include "ServiceCallerWithTimeout.h"
 
 constexpr auto PUBLISH_WAIT_TIME_MS = 120;
 
@@ -733,6 +734,8 @@ void BridgeTester::canCallAServiceJSONWithError()
 
 void BridgeTester::canCallAServiceJSONWithTimeout()
 {
+    QCOMPARE(ServiceCallerWithTimeout::getNumberOfInstances(), 0ul);
+
     ros::CallbackQueue async_cb_queue;
     ros::AsyncSpinner ros_async_spinner(1, &async_cb_queue);
     ros::NodeHandle nh;
@@ -782,6 +785,8 @@ void BridgeTester::canCallAServiceJSONWithTimeout()
         nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString()).dump();
     QCOMPARE(jsonStr, expectedJsonStr);
 
+    QCOMPARE(ServiceCallerWithTimeout::getNumberOfInstances(), 0ul);
+
     // if nothing has crashed, shutdown properly
     ros_async_spinner.stop();
 }
@@ -826,9 +831,13 @@ void BridgeTester::canCallAServiceJSONWithErrorAfterDisconnect()
     QVERIFY(serviceHasBeenCalled);
     QVERIFY(serviceReq);
 
+    QCOMPARE(ServiceCallerWithTimeout::getNumberOfInstances(), 1ul);
+
     // destroy client
     client->deleteLater();
     QTest::qWait(100);
+
+    QCOMPARE(ServiceCallerWithTimeout::getNumberOfInstances(), 0ul);
 
     // if nothing has crashed, shutdown properly
     ros_async_spinner.stop();

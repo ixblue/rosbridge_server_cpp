@@ -22,6 +22,7 @@ public:
 
     void call();
     ros_babel_fish::TranslatedMessage::Ptr getResponse() const;
+    static uint64_t getNumberOfInstances();
 
 signals:
     // Service call succeeded, call getResponse() to get the response
@@ -39,7 +40,6 @@ private:
     // BabelFish object must only be used from the main thread!
     std::shared_ptr<ros_babel_fish::BabelFish> m_fish;
     std::thread m_serviceThread;
-    std::thread m_timeoutThread;
     ros::NodeHandle m_nh;
     ros::ServiceClient m_serviceClient;
     ros_babel_fish::BabelFishMessage::Ptr m_request;
@@ -49,4 +49,7 @@ private:
     const std::string m_serviceName;
     const double m_serviceTimeout;
     bool m_hasTimedOut = false;
+
+    // number of classes active, for debug and unit testing
+    static std::atomic<uint64_t> m_instances;
 };
