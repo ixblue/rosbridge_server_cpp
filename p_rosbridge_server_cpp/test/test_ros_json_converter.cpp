@@ -2,6 +2,8 @@
 #include <cstdio>
 #include <limits>
 
+#include <QElapsedTimer>
+
 #include <gtest/gtest.h>
 
 #include <ros_babel_fish/babel_fish.h>
@@ -19,6 +21,7 @@
 #include <sensor_msgs/SetCameraInfo.h>
 #include <std_msgs/Duration.h>
 #include <std_msgs/Float64.h>
+#include <std_msgs/Int64MultiArray.h>
 #include <std_msgs/String.h>
 
 #include "ROSNode.h"
@@ -214,6 +217,17 @@ void fillMessage(sensor_msgs::ChannelFloat32& m)
     m.name = "channel name";
     m.values.resize(5);
     std::iota(m.values.begin(), m.values.end(), 0);
+}
+
+void fillMessage(std_msgs::Int64MultiArray& m, size_t size)
+{
+    m.layout.data_offset = 0;
+    m.layout.dim.resize(1);
+    m.layout.dim[0].label = "data";
+    m.layout.dim[0].size = size;
+    m.layout.dim[0].stride = size;
+    m.data.resize(size);
+    std::iota(m.data.begin(), m.data.end(), 0);
 }
 
 template<typename T>
@@ -1383,6 +1397,34 @@ TYPED_TEST(JSONTester, CanConvertChannelFloat32WithNaNAndInfinityToJson)
     const auto expectedJson = R"({"name":"channel name","values":[1.0, null, null]})";
     const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
     EXPECT_EQ(json, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanConvertInt64MultiArrayToJson)
+{
+    ros_babel_fish::BabelFish fish;
+    std_msgs::Int64MultiArray msg;
+    fillMessage(msg, 10);
+    auto bfMsg = serializeMessage(fish, msg);
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
+
+    const auto expectedJson =
+        R"({"layout": {"data_offset": 0, "dim": [{"label": "data", "size": 10, "stride": 10}]}, "data": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanConvertBigInt64MultiArrayToJson)
+{
+    ros_babel_fish::BabelFish fish;
+    std_msgs::Int64MultiArray msg;
+    fillMessage(msg, 10000);
+    auto bfMsg = serializeMessage(fish, msg);
+    QElapsedTimer t;
+    t.start();
+    const std::string json = this->parser.toJsonString(fish, bfMsg);
+    std::cerr << "serialized to JSON in " << t.nsecsElapsed() << " nsec\n";
+
+    EXPECT_GT(json.size(), 10000u);
 }
 
 /////////////////
