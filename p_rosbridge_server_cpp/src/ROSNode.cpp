@@ -372,8 +372,7 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
 {
     if(client == nullptr)
     {
-        ROS_ERROR_STREAM_NAMED("service",
-                               "called service with nullptr client");
+        ROS_ERROR_STREAM_NAMED("service", "called service with nullptr client");
         return;
     }
 
@@ -392,22 +391,22 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
         // establish the qt connection on the WSClient context: if the connection is
         // deleted it will be disconnected automatically
 
-        connect(
-            serviceClient, &ServiceCallerWithTimeout::success, client,
-            [this, id = args.id, compression = args.compression,
-             serviceName = args.serviceName, client, serviceClient]() {
-                auto res = serviceClient->getResponse();
+        connect(serviceClient, &ServiceCallerWithTimeout::success, client,
+                [this, id = args.id, compression = args.compression,
+                 serviceName = args.serviceName, client, serviceClient]() {
+                    auto res = serviceClient->getResponse();
 
-                const auto encoding = rbp::compressionToEncoding(compression);
+                    const auto encoding = rbp::compressionToEncoding(compression);
 
-                nlohmann::json responseJson = ros_nlohmann_converter::translatedMsgtoJson(
-                    *res->translated_message,
-                    encoding == rosbridge_protocol::Encoding::CBOR);
+                    nlohmann::json responseJson =
+                        ros_nlohmann_converter::translatedMsgtoJson(
+                            *res->translated_message,
+                            encoding == rosbridge_protocol::Encoding::CBOR);
 
-                const auto [json, cbor, cborRaw] = encodeServiceResponseToWireFormat(
-                    serviceName, id, responseJson, true, encoding);
-                sendMsgToClient(client, json, cbor, cborRaw, encoding);
-            });
+                    const auto [json, cbor, cborRaw] = encodeServiceResponseToWireFormat(
+                        serviceName, id, responseJson, true, encoding);
+                    sendMsgToClient(client, json, cbor, cborRaw, encoding);
+                });
 
         connect(serviceClient, &ServiceCallerWithTimeout::error, client,
                 [this, id = args.id, compression = args.compression, client,
@@ -659,18 +658,10 @@ void ROSNode::handleROSMessage(const std::string& topic,
             {
                 switch(client->encoding)
                 {
-                case rosbridge_protocol::Encoding::JSON:
-                    toJson = true;
-                    break;
-                case rosbridge_protocol::Encoding::CBOR:
-                    toCbor = true;
-                    break;
-                case rosbridge_protocol::Encoding::CBOR_RAW:
-                    toCborRaw = true;
-                    break;
-                default:
-                    throw std::runtime_error("unhandled encoding");
-                    break;
+                case rosbridge_protocol::Encoding::JSON: toJson = true; break;
+                case rosbridge_protocol::Encoding::CBOR: toCbor = true; break;
+                case rosbridge_protocol::Encoding::CBOR_RAW: toCborRaw = true; break;
+                default: throw std::runtime_error("unhandled encoding"); break;
                 }
             }
 
@@ -682,7 +673,8 @@ void ROSNode::handleROSMessage(const std::string& topic,
 
             ROS_DEBUG_STREAM_NAMED("topic", "Converted ROS msg on topic "
                                                 << topic << " to wire format(s) in "
-                                                << convertTimer.nsecsElapsed() / 1000 << " us");
+                                                << convertTimer.nsecsElapsed() / 1000
+                                                << " us");
 
             // Warning, the sendTopicToClient() call can trigger an abort operation on the
             // Websocket, and then remove a client while we are looping on the clients
@@ -850,7 +842,8 @@ void ROSNode::publishStats() const
     }
 }
 
-void ROSNode::produceNetworkDiagnostics(diagnostic_updater::DiagnosticStatusWrapper& status)
+void ROSNode::produceNetworkDiagnostics(
+    diagnostic_updater::DiagnosticStatusWrapper& status)
 {
     status.add("Connected clients", m_clients.size());
     auto network_output_kbytessec = 0.;
