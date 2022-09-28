@@ -106,7 +106,7 @@ ROSNode::encodeMsgToWireFormat(ros_babel_fish::BabelFish& fish,
         {
             const auto msgJson = ros_nlohmann_converter::toJson(fish, *msg);
             const nlohmann::json j{{"op", "publish"}, {"topic", topic}, {"msg", msgJson}};
-            jsonStr = j.dump();
+            jsonStr = ros_nlohmann_converter::dumpJson(j);
         }
     }
 
@@ -165,7 +165,7 @@ ROSNode::encodeServiceResponseToWireFormat(const std::string& service,
     {
         return {"", nlohmann::json::to_cbor(json), {}};
     }
-    return {json.dump(), {}, {}};
+    return {ros_nlohmann_converter::dumpJson(json), {}, {}};
 }
 
 std::string ROSNode::getMandatoryNotEmptyStringFromJson(const nlohmann::json& json,
@@ -452,7 +452,8 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
     catch(const std::runtime_error& e)
     {
         std::ostringstream ss;
-        ss << "Bad service args: '" << args.args.dump() << "': " << e.what();
+        ss << "Bad service args: '" << ros_nlohmann_converter::dumpJson(args.args)
+           << "': " << e.what();
         sendStatus(client, rbp::StatusLevel::Error, ss.str());
 
         const auto encoding = rbp::compressionToEncoding(args.compression);
@@ -754,7 +755,7 @@ void ROSNode::sendStatus(WSClient* client, rbp::StatusLevel level, const std::st
             json["id"] = id;
         }
 
-        sendMsg(client, json.dump());
+        sendMsg(client, ros_nlohmann_converter::dumpJson(json));
     }
 }
 

@@ -277,4 +277,9 @@ nlohmann::json toBinaryJson(ros_babel_fish::BabelFish& fish,
     return translatedMsgtoJson(*babelFishMsg, true);
 }
 
+std::string dumpJson(const nlohmann::json& j)
+{
+    return j.dump(-1, ' ', false, nlohmann::json::basic_json::error_handler_t::replace);
+}
+
 } // namespace ros_nlohman_converter

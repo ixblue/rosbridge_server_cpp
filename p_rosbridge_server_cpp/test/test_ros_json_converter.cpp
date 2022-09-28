@@ -301,17 +301,18 @@ public:
     std::string toJsonString(ros_babel_fish::BabelFish& fish,
                              const ros_babel_fish::BabelFishMessage& msg) override
     {
-        return ros_nlohmann_converter::toJson(fish, msg).dump();
+        return ros_nlohmann_converter::dumpJson(
+            ros_nlohmann_converter::toJson(fish, msg));
     }
 
     std::string parseAndStringify(const std::string& jsonStr) override
     {
-        return nlohmann::json::parse(jsonStr).dump();
+        return ros_nlohmann_converter::dumpJson(nlohmann::json::parse(jsonStr));
     }
 
     std::string cborToJsonString(const std::vector<uint8_t>& cbor) override
     {
-        return nlohmann::json::from_cbor(cbor).dump();
+        return ros_nlohmann_converter::dumpJson(nlohmann::json::from_cbor(cbor));
     }
 
     std::vector<uint8_t>
@@ -1403,6 +1404,32 @@ TYPED_TEST(JSONTester, CanConvertBigInt64MultiArrayToJson)
     std::cerr << "serialized to JSON in " << t.nsecsElapsed() << " nsec\n";
 
     EXPECT_GT(json.size(), 10000u);
+}
+
+TYPED_TEST(JSONTester, CanConvertStringToJson)
+{
+    std_msgs::String msg;
+    msg.data = "test123";
+    auto bfMsg = serializeMessage(g_fish, msg);
+    const std::string json = this->parser.toJsonString(g_fish, bfMsg);
+    // uint8[] encoded as base64
+    const auto expectedJson = R"({"data":"test123"})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanConvertNonUtf8StringToJson)
+{
+    std_msgs::String msg;
+    msg.data = "test123\xc0";
+    auto bfMsg = serializeMessage(g_fish, msg);
+    const std::string json = this->parser.toJsonString(g_fish, bfMsg);
+
+    // uint8[] encoded as base64
+    // we expect the invalid character to be replacer by a "?"
+    const auto expectedJson = R"({"data":"test123�"})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
 }
 
 /////////////////
