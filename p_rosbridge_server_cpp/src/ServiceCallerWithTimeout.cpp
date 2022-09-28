@@ -1,5 +1,7 @@
 #include "ServiceCallerWithTimeout.h"
 
+std::atomic<uint64_t> ServiceCallerWithTimeout::m_instances{0};
+
 ServiceCallerWithTimeout::ServiceCallerWithTimeout(
     const std::shared_ptr<ros_babel_fish::BabelFish>& fish,
     const std::string& serviceName, const ros_babel_fish::Message::Ptr& req,
@@ -15,49 +17,43 @@ ServiceCallerWithTimeout::ServiceCallerWithTimeout(
         m_hasTimedOut = true;
         // Emit timeout signal
         emit timeout();
-
-        // Then spawn a new thread waiting for the service thread to join
-        m_timeoutThread = std::thread([this]() {
-            m_serviceClient.shutdown();
-            if(m_serviceThread.joinable())
-            {
-                m_serviceThread.join();
-            }
-            ROS_DEBUG_STREAM_NAMED("service",
-                                   "Service thread to " << m_serviceName << " joined");
-            // Once both threads have finished, delete itself later in Qt event loop
-            deleteLater();
-        });
+        // this call should be thread-safe, because it will directly call
+        // ros::Connection::drop() that is thread-safe
+        m_serviceClient.shutdown();
     });
     m_timeoutTimer.setSingleShot(true);
 
-    connect(this, &ServiceCallerWithTimeout::serviceCallFinished, this, [this]() {
-        if(!m_hasTimedOut)
-        {
-            ROS_DEBUG_STREAM_NAMED("service",
-                                   "Service call to " << m_serviceName << " succeeded");
-            m_timeoutTimer.stop();
-            m_translatedResponse = m_fish->translateMessage(m_response);
-            deleteLater();
-            emit success();
-        }
-        else
-        {
-            ROS_WARN_STREAM_NAMED(
-                "service",
-                "Service call to "
-                    << m_serviceName
-                    << " has just finished but already timed out, ignore response");
-            // No deleteLater, already called in timeoutThread
-        }
-    });
-
-    connect(this, &ServiceCallerWithTimeout::callError, this,
-            [this](const QString& errorMsg) {
+    connect(
+        this, &ServiceCallerWithTimeout::serviceCallFinished, this,
+        [this]() {
+            if(!m_hasTimedOut)
+            {
+                ROS_DEBUG_STREAM_NAMED("service", "Service call to " << m_serviceName
+                                                                     << " succeeded");
                 m_timeoutTimer.stop();
-                deleteLater();
-                emit error(errorMsg);
-            });
+                m_translatedResponse = m_fish->translateMessage(m_response);
+                emit success();
+            }
+            else
+            {
+                ROS_WARN_STREAM_NAMED(
+                    "service",
+                    "Service call to "
+                        << m_serviceName
+                        << " has just finished but already timed out, ignore response");
+            }
+            deleteLater();
+        },
+        Qt::QueuedConnection);
+
+    connect(
+        this, &ServiceCallerWithTimeout::callError, this,
+        [this](const QString& errorMsg) {
+            m_timeoutTimer.stop();
+            emit error(errorMsg);
+            deleteLater();
+        },
+        Qt::QueuedConnection);
 
     // Content from BabelFish::callService, split here to avoid the use of m_fish in
     // the other thread
@@ -82,23 +78,24 @@ ServiceCallerWithTimeout::ServiceCallerWithTimeout(
 
     // Create service client
     ros::ServiceClientOptions ops(ros::names::resolve(serviceName),
-                                  ros::service_traits::md5sum(*m_request), false,
+                                  ros::service_traits::md5sum(*m_request), true,
                                   ros::M_string());
     m_serviceClient = m_nh.serviceClient(ops);
+    m_instances++;
 }
 
 ServiceCallerWithTimeout::~ServiceCallerWithTimeout()
 {
     if(m_serviceThread.joinable())
     {
+        // try to stop service so we won't block the main thread
+        m_serviceClient.shutdown();
         m_serviceThread.join();
     }
 
-    if(m_timeoutThread.joinable())
-    {
-        m_timeoutThread.join();
-    }
     ROS_DEBUG_STREAM_NAMED("service", "~ServiceCallerWithTimeout " << m_serviceName);
+
+    m_instances--;
 }
 
 void ServiceCallerWithTimeout::call()
@@ -125,4 +122,9 @@ void ServiceCallerWithTimeout::call()
 ros_babel_fish::TranslatedMessage::Ptr ServiceCallerWithTimeout::getResponse() const
 {
     return m_translatedResponse;
+}
+
+uint64_t ServiceCallerWithTimeout::getNumberOfInstances()
+{
+    return m_instances;
 }
