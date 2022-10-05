@@ -21,8 +21,10 @@
 #include <sensor_msgs/SetCameraInfo.h>
 #include <std_msgs/Duration.h>
 #include <std_msgs/Float64.h>
+#include <std_msgs/Int16MultiArray.h>
 #include <std_msgs/Int64MultiArray.h>
 #include <std_msgs/String.h>
+#include <std_msgs/UInt16MultiArray.h>
 
 #include "ROSNode.h"
 #include "nlohmann_to_ros.h"
@@ -221,6 +223,28 @@ void fillMessage(sensor_msgs::ChannelFloat32& m)
 }
 
 void fillMessage(std_msgs::Int64MultiArray& m, size_t size)
+{
+    m.layout.data_offset = 0;
+    m.layout.dim.resize(1);
+    m.layout.dim[0].label = "data";
+    m.layout.dim[0].size = size;
+    m.layout.dim[0].stride = size;
+    m.data.resize(size);
+    std::iota(m.data.begin(), m.data.end(), 0);
+}
+
+void fillMessage(std_msgs::Int16MultiArray& m, size_t size)
+{
+    m.layout.data_offset = 0;
+    m.layout.dim.resize(1);
+    m.layout.dim[0].label = "data";
+    m.layout.dim[0].size = size;
+    m.layout.dim[0].stride = size;
+    m.data.resize(size);
+    std::iota(m.data.begin(), m.data.end(), 0);
+}
+
+void fillMessage(std_msgs::UInt16MultiArray& m, size_t size)
 {
     m.layout.data_offset = 0;
     m.layout.dim.resize(1);
@@ -1374,6 +1398,34 @@ TYPED_TEST(JSONTester, CanConvertChannelFloat32WithNaNAndInfinityToJson)
     const std::string json = this->parser.toJsonString(g_fish, bfMsg);
 
     const auto expectedJson = R"({"name":"channel name","values":[1.0, null, null]})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanConvertInt16MultiArrayToJson)
+{
+
+    std_msgs::Int16MultiArray msg;
+    fillMessage(msg, 10);
+    auto bfMsg = serializeMessage(g_fish, msg);
+    const std::string json = this->parser.toJsonString(g_fish, bfMsg);
+
+    const auto expectedJson =
+        R"({"layout": {"data_offset": 0, "dim": [{"label": "data", "size": 10, "stride": 10}]}, "data": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
+
+TYPED_TEST(JSONTester, CanConvertUInt16MultiArrayToJson)
+{
+
+    std_msgs::UInt16MultiArray msg;
+    fillMessage(msg, 10);
+    auto bfMsg = serializeMessage(g_fish, msg);
+    const std::string json = this->parser.toJsonString(g_fish, bfMsg);
+
+    const auto expectedJson =
+        R"({"layout": {"data_offset": 0, "dim": [{"label": "data", "size": 10, "stride": 10}]}, "data": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]})";
     const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
     EXPECT_EQ(json, expectedOutput);
 }

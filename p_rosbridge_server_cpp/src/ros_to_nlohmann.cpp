@@ -178,7 +178,7 @@ nlohmann::json translatedMsgtoJson(const ros_babel_fish::Message& message, bool 
                     out = getJsonArrayFromBabelFishArray<bool, bool>(base);
                     break;
                 case ros_babel_fish::MessageTypes::UInt16:
-                    out = getJsonArrayFromBabelFishArray<unsigned int, uint16_t>(base);
+                    out = getJsonArrayFromBabelFishArray<uint16_t, uint16_t>(base);
                     break;
                 case ros_babel_fish::MessageTypes::UInt32:
                     out = getJsonArrayFromBabelFishArray<uint32_t, uint32_t>(base);
@@ -187,7 +187,7 @@ nlohmann::json translatedMsgtoJson(const ros_babel_fish::Message& message, bool 
                     out = getJsonArrayFromBabelFishArray<uint64_t, uint64_t>(base);
                     break;
                 case ros_babel_fish::MessageTypes::Int16:
-                    out = getJsonArrayFromBabelFishArray<int, int16_t>(base);
+                    out = getJsonArrayFromBabelFishArray<int16_t, int16_t>(base);
                     break;
                 case ros_babel_fish::MessageTypes::Int32:
                     out = getJsonArrayFromBabelFishArray<int32_t, int32_t>(base);
