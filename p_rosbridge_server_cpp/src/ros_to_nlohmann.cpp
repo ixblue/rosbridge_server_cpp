@@ -31,7 +31,7 @@ getBinaryJsonFromBabelFishArrayUInt8(const ros_babel_fish::ArrayMessageBase& bas
     return json::binary(vec);
 }
 
-template<typename IT, typename OT>
+template<typename T>
 nlohmann::json::array_t
 getJsonArrayFromBabelFishArray(const ros_babel_fish::ArrayMessageBase& base)
 {
@@ -39,7 +39,7 @@ getJsonArrayFromBabelFishArray(const ros_babel_fish::ArrayMessageBase& base)
     out.reserve(base.length());
     for(size_t i = 0; i < base.length(); ++i)
     {
-        out.emplace_back(static_cast<OT>(base.as<ros_babel_fish::ArrayMessage<IT>>()[i]));
+        out.emplace_back(base.as<ros_babel_fish::ArrayMessage<T>>()[i]);
     }
     return out;
 }
@@ -175,34 +175,34 @@ nlohmann::json translatedMsgtoJson(const ros_babel_fish::Message& message, bool 
                     out = getBase64FromBabelFishArray<int8_t>(base);
                     break;
                 case ros_babel_fish::MessageTypes::Bool:
-                    out = getJsonArrayFromBabelFishArray<bool, bool>(base);
+                    out = getJsonArrayFromBabelFishArray<bool>(base);
                     break;
                 case ros_babel_fish::MessageTypes::UInt16:
-                    out = getJsonArrayFromBabelFishArray<uint16_t, uint16_t>(base);
+                    out = getJsonArrayFromBabelFishArray<uint16_t>(base);
                     break;
                 case ros_babel_fish::MessageTypes::UInt32:
-                    out = getJsonArrayFromBabelFishArray<uint32_t, uint32_t>(base);
+                    out = getJsonArrayFromBabelFishArray<uint32_t>(base);
                     break;
                 case ros_babel_fish::MessageTypes::UInt64:
-                    out = getJsonArrayFromBabelFishArray<uint64_t, uint64_t>(base);
+                    out = getJsonArrayFromBabelFishArray<uint64_t>(base);
                     break;
                 case ros_babel_fish::MessageTypes::Int16:
-                    out = getJsonArrayFromBabelFishArray<int16_t, int16_t>(base);
+                    out = getJsonArrayFromBabelFishArray<int16_t>(base);
                     break;
                 case ros_babel_fish::MessageTypes::Int32:
-                    out = getJsonArrayFromBabelFishArray<int32_t, int32_t>(base);
+                    out = getJsonArrayFromBabelFishArray<int32_t>(base);
                     break;
                 case ros_babel_fish::MessageTypes::Int64:
-                    out = getJsonArrayFromBabelFishArray<int64_t, int64_t>(base);
+                    out = getJsonArrayFromBabelFishArray<int64_t>(base);
                     break;
                 case ros_babel_fish::MessageTypes::Float32:
-                    out = getJsonArrayFromBabelFishArray<float, float>(base);
+                    out = getJsonArrayFromBabelFishArray<float>(base);
                     break;
                 case ros_babel_fish::MessageTypes::Float64:
-                    out = getJsonArrayFromBabelFishArray<double, double>(base);
+                    out = getJsonArrayFromBabelFishArray<double>(base);
                     break;
                 case ros_babel_fish::MessageTypes::String:
-                    out = getJsonArrayFromBabelFishArray<std::string, std::string>(base);
+                    out = getJsonArrayFromBabelFishArray<std::string>(base);
                     break;
                 case ros_babel_fish::MessageTypes::Time: {
                     out = getTimeJsonArrayFromBabelFishArray<ros::Time>(base);
