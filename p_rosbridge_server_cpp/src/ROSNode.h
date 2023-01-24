@@ -19,6 +19,8 @@
 #include <ros/ros.h>
 #include <ros_babel_fish/babel_fish.h>
 
+#include <ros1_robopec_utils/NodeWatchdog.h>
+
 #include "rosbridge_protocol.h"
 
 class WSClient;
@@ -155,6 +157,8 @@ private:
     std::vector<std::shared_ptr<WSClient>> m_clients;
     rosbridge_protocol::StatusLevel m_currentStatusLevel =
         rosbridge_protocol::StatusLevel::Error;
+
+    NodeWatchdog m_watchdog;
 
     std::map<std::string,
              std::function<void(WSClient*, const nlohmann::json&, const std::string&)>>
