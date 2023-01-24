@@ -66,6 +66,7 @@
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>rosbridge_cpp_msgs</exec_depend>
   <exec_depend>message_runtime</exec_depend>
+  <depend>ros1_robopec_utils</depend>
 
   <!--depend>mdt_msgs</depend-->
 

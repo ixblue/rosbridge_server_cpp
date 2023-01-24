@@ -2,3 +2,7 @@
     local-name: librosqt
     uri: ssh://git@git.robopec.com:7999/rob/librosqt.git
     version: master
+- git:
+    local-name: ros1_robopec_utils
+    uri: ssh://git@git.robopec.com:7999/rob/ros1_robopec_utils.git
+    version: master

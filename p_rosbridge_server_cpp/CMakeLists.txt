@@ -14,7 +14,8 @@ set(CATKIN_DEPS
     roscpp
     std_msgs
 #    mdt_msgs
-    rosbridge_cpp_msgs)
+    rosbridge_cpp_msgs
+    ros1_robopec_utils)
 find_package(catkin REQUIRED
     ${CATKIN_DEPS}
     )
