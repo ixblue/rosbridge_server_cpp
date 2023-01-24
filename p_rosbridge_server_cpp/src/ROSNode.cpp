@@ -25,7 +25,7 @@ using namespace std::string_literals;
 namespace rbp = rosbridge_protocol;
 
 ROSNode::ROSNode(QObject* parent)
-    : QObject(parent), m_nhPrivate{"~"}, m_watchdog(m_nhPrivate.param("watchdog_timeout_s",5.0)),
+    : QObject(parent), m_nhPrivate{"~"}, m_watchdog(5.0),
       m_opHandlers{
           {"advertise", [this](WSClient* c, const auto& j,
                                const auto& id) { advertiseHandler(c, j, id); }},
