@@ -24,6 +24,7 @@ Les "compressions" **JSON**, **CBOR** et **CBOR-RAW** sont supportés mais pas l
 En plus des fonctionnalités non implémentées, quelques choix de design diffèrent :
 
 - Le paramètre `type` de la requête `call_service` est obligatoire. La version Python l'ignore et recherche le type avec l'API rosmaster.
+- Un watchdog kill le noeud quand la boucle ROS est bloquée pendant plus de 5s
 
 ## Détails d'implémentation
 
@@ -64,6 +65,8 @@ Dans l'autre sens, à partir du JSON, les deux formats sont supportés. Tableau 
 - `port` (*int*) : Port de la websocket. La valeur 0 conduit à ce que l'OS donne un port (défaut = `9090`)
 - `service_timeout` (*double*) : Durée du timeout pour les appels de services en secondes (défaut = `5.0`)
 - `pong_timeout_s` (*double*) : Durée de timeout, en secondes, avant que l'on déconnecte le client (défaut = `30.0`)
+- `watchdog_enabled` (*bool*) : Activation du watchdog (défault = `true`)
+- `watchdog_timeout` (*double*) : Timeout du watchdog (défault = `5.0`)
 
 ## Paramètres set par le nœud
 
