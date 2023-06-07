@@ -15,7 +15,7 @@ set(CATKIN_DEPS
     std_msgs
 #    mdt_msgs
     rosbridge_cpp_msgs
-    ros1_robopec_utils)
+    )
 find_package(catkin REQUIRED
     ${CATKIN_DEPS}
     )
@@ -74,6 +74,7 @@ add_library(${PROJECT_NAME}
     src/rosbridge_protocol.cpp
     src/ros_to_nlohmann.cpp
     src/nlohmann_to_ros.cpp
+    src/utils/NodeWatchdog.cpp
 )
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}

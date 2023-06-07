@@ -19,7 +19,7 @@
 #include <ros/ros.h>
 #include <ros_babel_fish/babel_fish.h>
 
-#include <ros1_robopec_utils/NodeWatchdog.h>
+#include <utils/NodeWatchdog.h>
 
 #include "rosbridge_protocol.h"
 
