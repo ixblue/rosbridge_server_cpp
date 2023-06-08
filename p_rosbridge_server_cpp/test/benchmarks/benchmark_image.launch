@@ -1,0 +1,21 @@
+<launch>
+  <arg name="use_rosbridge_cpp" default="true"/>
+
+  <group if="$(eval arg('use_rosbridge_cpp'))">
+    <node name="p_rosbridge_server_cpp" pkg="p_rosbridge_server_cpp" type="p_rosbridge_server_cpp_node" output="screen">
+      <param name="port" value="9090"/>
+    </node>
+  </group>
+
+  <group unless="$(eval arg('use_rosbridge_cpp'))">
+    <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" >
+     <arg name="port" value="9090"/>
+    </include>
+  </group>
+
+  <node name="pub_node" pkg="p_rosbridge_server_cpp" type="benchmark_image_pub" output="screen" />
+
+  <node name="ws_sub_node" pkg="p_rosbridge_server_cpp" type="benchmark_image_sub.py" output="screen" />
+  <node name="ws_sub_node2" pkg="p_rosbridge_server_cpp" type="benchmark_image_sub.py" output="screen" />
+
+</launch>

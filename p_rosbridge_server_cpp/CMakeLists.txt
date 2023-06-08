@@ -181,6 +181,12 @@ install(DIRECTORY
 #############
 
 if (CATKIN_ENABLE_TESTING)
+  find_package(catkin REQUIRED
+    ${CATKIN_DEPS}
+    sensor_msgs
+  )
+
+
   # Add gtest based cpp test target and link libraries
   catkin_add_gtest(ROSJsonConverterTest test/test_ros_json_converter.cpp)
   if(TARGET ROSJsonConverterTest)
@@ -196,6 +202,13 @@ if (CATKIN_ENABLE_TESTING)
   add_rostest_gtest(bridge_tester test/bridge_tester.test test/BridgeTester.cpp)
   #catkin_add_gtest(bridge_tester test/BridgeTester.cpp)
   target_link_libraries(bridge_tester ${PROJECT_NAME} ${catkin_LIBRARIES} Qt5::Test)
+
+  # Benchmark tests
+  add_executable(benchmark_gps_pub test/benchmarks/benchmark_gps_pub.cpp)
+  target_link_libraries(benchmark_gps_pub ${catkin_LIBRARIES})
+
+  add_executable(benchmark_image_pub test/benchmarks/benchmark_image_pub.cpp)
+  target_link_libraries(benchmark_image_pub ${catkin_LIBRARIES})
 
   ## Add folders to be run by python nosetests
   # catkin_add_nosetests(test)

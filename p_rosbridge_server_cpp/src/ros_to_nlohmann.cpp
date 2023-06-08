@@ -1,6 +1,5 @@
-#include <sstream>
-
 #include <QByteArray>
+#include <sstream>
 
 #include "ros_to_nlohmann.h"
 
@@ -14,7 +13,7 @@ nlohmann::json
 getBinaryJsonFromBabelFishArray(const ros_babel_fish::ArrayMessageBase& base,
                                 std::int64_t subtype)
 {
-    size_t size = base.as<ros_babel_fish::ArrayMessage<T>>()._sizeInBytes();
+    size_t size = base.as<ros_babel_fish::ArrayMessage<T>>().length() * sizeof(T);
     const uint8_t* dataPtr = base.as<ros_babel_fish::ArrayMessage<T>>()._stream();
     std::vector<uint8_t> vec(dataPtr, dataPtr + size);
 
@@ -24,7 +23,7 @@ getBinaryJsonFromBabelFishArray(const ros_babel_fish::ArrayMessageBase& base,
 nlohmann::json
 getBinaryJsonFromBabelFishArrayUInt8(const ros_babel_fish::ArrayMessageBase& base)
 {
-    size_t size = base.as<ros_babel_fish::ArrayMessage<uint8_t>>()._sizeInBytes();
+    size_t size = base.as<ros_babel_fish::ArrayMessage<uint8_t>>().length();
     const uint8_t* dataPtr = base.as<ros_babel_fish::ArrayMessage<uint8_t>>()._stream();
     std::vector<uint8_t> vec(dataPtr, dataPtr + size);
 
@@ -47,12 +46,14 @@ getJsonArrayFromBabelFishArray(const ros_babel_fish::ArrayMessageBase& base)
 template<typename T>
 QByteArray getBase64FromBabelFishArray(const ros_babel_fish::ArrayMessageBase& base)
 {
-    QByteArray buffer;
-    for(size_t i = 0; i < base.length(); ++i)
-    {
-        buffer.push_back(
-            static_cast<int8_t>(base.as<ros_babel_fish::ArrayMessage<T>>()[i]));
-    }
+    size_t size = base.as<ros_babel_fish::ArrayMessage<T>>().length();
+    const uint8_t* dataPtr = base.as<ros_babel_fish::ArrayMessage<T>>()._stream();
+    QByteArray buffer = QByteArray::fromRawData(reinterpret_cast<const char*>(dataPtr),
+                                                static_cast<int>(size));
+
+    // QByteArray toBase64 seems to be slow, use alternatives
+    // https://github.com/powturbo/Turbo-Base64 : fast but GPL
+    // https://github.com/aklomp/base64 : BSD license
     return buffer.toBase64();
 }
 
@@ -103,58 +104,56 @@ nlohmann::json translatedMsgtoJson(const ros_babel_fish::Message& message, bool 
         // see :
         // https://github.com/RobotWebTools/rosbridge_suite/blob/ef0e4172667068b4c582a7277fe0b3071fa06aaf/rosbridge_library/src/rosbridge_library/internal/cbor_conversion.py
 
-        if(useBinary && (base.elementType() == ros_babel_fish::MessageTypes::UInt8 ||
-                         base.elementType() == ros_babel_fish::MessageTypes::UInt16 ||
-                         base.elementType() == ros_babel_fish::MessageTypes::UInt32 ||
-                         base.elementType() == ros_babel_fish::MessageTypes::UInt64 ||
-                         base.elementType() == ros_babel_fish::MessageTypes::Int8 ||
-                         base.elementType() == ros_babel_fish::MessageTypes::Int16 ||
-                         base.elementType() == ros_babel_fish::MessageTypes::Int32 ||
-                         base.elementType() == ros_babel_fish::MessageTypes::Int64 ||
-                         base.elementType() == ros_babel_fish::MessageTypes::Float32 ||
-                         base.elementType() == ros_babel_fish::MessageTypes::Float64))
+        bool parsed = false;
+        if(useBinary)
         {
             switch(base.elementType())
             {
             case ros_babel_fish::MessageTypes::UInt8:
                 out = getBinaryJsonFromBabelFishArrayUInt8(base);
+                parsed = true;
                 break;
             case ros_babel_fish::MessageTypes::UInt16:
                 out = getBinaryJsonFromBabelFishArray<uint16_t>(base, 69);
+                parsed = true;
                 break;
             case ros_babel_fish::MessageTypes::UInt32:
                 out = getBinaryJsonFromBabelFishArray<uint32_t>(base, 70);
+                parsed = true;
                 break;
             case ros_babel_fish::MessageTypes::UInt64:
                 out = getBinaryJsonFromBabelFishArray<uint64_t>(base, 71);
+                parsed = true;
                 break;
             case ros_babel_fish::MessageTypes::Int8:
                 out = getBinaryJsonFromBabelFishArray<int8_t>(base, 72);
+                parsed = true;
                 break;
             case ros_babel_fish::MessageTypes::Int16:
                 out = getBinaryJsonFromBabelFishArray<int16_t>(base, 77);
+                parsed = true;
                 break;
             case ros_babel_fish::MessageTypes::Int32:
                 out = getBinaryJsonFromBabelFishArray<int32_t>(base, 78);
+                parsed = true;
                 break;
             case ros_babel_fish::MessageTypes::Int64:
                 out = getBinaryJsonFromBabelFishArray<int64_t>(base, 79);
+                parsed = true;
                 break;
             case ros_babel_fish::MessageTypes::Float32:
                 out = getBinaryJsonFromBabelFishArray<float>(base, 85);
+                parsed = true;
                 break;
             case ros_babel_fish::MessageTypes::Float64:
                 out = getBinaryJsonFromBabelFishArray<double>(base, 86);
+                parsed = true;
                 break;
-            default: {
-                std::ostringstream ss;
-                ss << "unimplemented elementType (" << std::hex << base.elementType()
-                   << ") for cbor array: this is a programming error";
-                throw std::runtime_error(ss.str());
-            }
+            default: parsed = false; break;
             }
         }
-        else
+
+        if(!parsed)
         {
             if(Q_UNLIKELY(base.length() == 0))
             {
@@ -169,10 +168,12 @@ nlohmann::json translatedMsgtoJson(const ros_babel_fish::Message& message, bool 
                 case ros_babel_fish::MessageTypes::UInt8:
                     // Special case for uint8[], encode as base64 string
                     out = getBase64FromBabelFishArray<uint8_t>(base);
+                    out.setAlreadyEscapedString(true);
                     break;
                 case ros_babel_fish::MessageTypes::Int8:
                     // Special case for int8[], encode as base64 string
                     out = getBase64FromBabelFishArray<int8_t>(base);
+                    out.setAlreadyEscapedString(true);
                     break;
                 case ros_babel_fish::MessageTypes::Bool:
                     out = getJsonArrayFromBabelFishArray<bool>(base);
@@ -204,18 +205,21 @@ nlohmann::json translatedMsgtoJson(const ros_babel_fish::Message& message, bool 
                 case ros_babel_fish::MessageTypes::String:
                     out = getJsonArrayFromBabelFishArray<std::string>(base);
                     break;
-                case ros_babel_fish::MessageTypes::Time: {
+                case ros_babel_fish::MessageTypes::Time:
+                {
                     out = getTimeJsonArrayFromBabelFishArray<ros::Time>(base);
                     break;
                 }
-                case ros_babel_fish::MessageTypes::Duration: {
+                case ros_babel_fish::MessageTypes::Duration:
+                {
                     out = getTimeJsonArrayFromBabelFishArray<ros::Duration>(base);
                     break;
                 }
                 case ros_babel_fish::MessageTypes::Array:
                     // Arrays of arrays are not supported in the ROS msg format
                     break;
-                case ros_babel_fish::MessageTypes::Compound: {
+                case ros_babel_fish::MessageTypes::Compound:
+                {
                     nlohmann::json::array_t outArray;
                     outArray.reserve(base.length());
                     for(size_t i = 0; i < base.length(); ++i)
@@ -282,4 +286,4 @@ std::string dumpJson(const nlohmann::json& j)
     return j.dump(-1, ' ', false, nlohmann::json::basic_json::error_handler_t::replace);
 }
 
-} // namespace ros_nlohman_converter
+} // namespace ros_nlohmann_converter

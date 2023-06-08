@@ -16281,7 +16281,15 @@ class serializer
             case value_t::string:
             {
                 o->write_character('\"');
-                dump_escaped(*val.m_value.string, ensure_ascii);
+                if(val.m_is_already_escaped)
+                {
+                    o->write_characters((val.m_value.string)->data(), (val.m_value.string)->size());
+                }
+                else
+                {
+                    dump_escaped(*val.m_value.string, ensure_ascii);
+                }
+
                 o->write_character('\"');
                 return;
             }
@@ -18299,7 +18307,7 @@ class basic_json // NOLINT(cppcoreguidelines-special-member-functions,hicpp-spec
     /// @brief copy constructor
     /// @sa https://json.nlohmann.me/api/basic_json/basic_json/
     basic_json(const basic_json& other)
-        : m_type(other.m_type)
+        : m_type(other.m_type), m_is_already_escaped(other.m_is_already_escaped)
     {
         // check of passed value is valid
         other.assert_invariant();
@@ -18368,6 +18376,7 @@ class basic_json // NOLINT(cppcoreguidelines-special-member-functions,hicpp-spec
     /// @sa https://json.nlohmann.me/api/basic_json/basic_json/
     basic_json(basic_json&& other) noexcept
         : m_type(std::move(other.m_type)),
+          m_is_already_escaped(std::move(other.m_is_already_escaped)),
           m_value(std::move(other.m_value))
     {
         // check that passed value is valid
@@ -18396,6 +18405,7 @@ class basic_json // NOLINT(cppcoreguidelines-special-member-functions,hicpp-spec
         using std::swap;
         swap(m_type, other.m_type);
         swap(m_value, other.m_value);
+        swap(m_is_already_escaped, other.m_is_already_escaped);
 
         set_parents();
         assert_invariant();
@@ -18448,6 +18458,12 @@ class basic_json // NOLINT(cppcoreguidelines-special-member-functions,hicpp-spec
     constexpr value_t type() const noexcept
     {
         return m_type;
+    }
+
+    /// true -> no escaping needed
+    void setAlreadyEscapedString(bool is_escaped) noexcept
+    {
+        m_is_already_escaped = is_escaped;
     }
 
     /// @brief return whether type is primitive
@@ -20366,6 +20382,7 @@ class basic_json // NOLINT(cppcoreguidelines-special-member-functions,hicpp-spec
     {
         std::swap(m_type, other.m_type);
         std::swap(m_value, other.m_value);
+        std::swap(m_is_already_escaped, other.m_is_already_escaped);
 
         set_parents();
         other.set_parents();
@@ -20988,6 +21005,9 @@ class basic_json // NOLINT(cppcoreguidelines-special-member-functions,hicpp-spec
 
     /// the type of the current element
     value_t m_type = value_t::null;
+
+    /// true if the type does not need encapsulation
+    bool m_is_already_escaped = false;
 
     /// the value of the current element
     json_value m_value = {};
