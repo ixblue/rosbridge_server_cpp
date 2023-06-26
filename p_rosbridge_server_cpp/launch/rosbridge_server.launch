@@ -4,8 +4,9 @@
 
   <arg name="port" default="9090" />
   <arg name="with_rosapi" default="false" />
+  <arg name="auto_respawn" default="true" />
 
-  <node name="p_rosbridge_server_cpp" pkg="p_rosbridge_server_cpp" type="p_rosbridge_server_cpp_node" output="screen">
+  <node name="p_rosbridge_server_cpp" pkg="p_rosbridge_server_cpp" type="p_rosbridge_server_cpp_node" respawn="$(arg auto_respawn)" output="screen">
     <param name="port" value="$(arg port)"/>
   </node>
 
