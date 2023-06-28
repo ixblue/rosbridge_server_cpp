@@ -20,11 +20,13 @@ if __name__ == '__main__':
         count = 0
 
         def onOpen(self):
+            compression = os.getenv('ROSBRIDGE_COMPRESSION', '')
+            print('Use compression: ', compression)
             self.sendMessage(json.dumps({
                 'op': 'subscribe',
                 'type': 'sensor_msgs/NavSatFix',
                 'topic': TOPIC,
-                'compression': '',
+                'compression': compression,
             }).encode('utf-8'))
 
         def onMessage(self, payload, is_binary):

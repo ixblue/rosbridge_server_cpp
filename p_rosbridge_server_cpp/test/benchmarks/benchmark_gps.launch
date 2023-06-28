@@ -1,5 +1,6 @@
 <launch>
   <arg name="use_rosbridge_cpp" default="true"/>
+  <arg name="subscribe_cbor" default="false"/>
 
   <group if="$(eval arg('use_rosbridge_cpp'))">
     <node name="p_rosbridge_server_cpp" pkg="p_rosbridge_server_cpp" type="p_rosbridge_server_cpp_node" output="screen">
@@ -17,7 +18,12 @@
 
   <node name="ws_sub_node" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
 
-
   <node name="ws_sub_node2" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
 
+  <group if="$(arg subscribe_cbor)">
+    <env name="ROSBRIDGE_COMPRESSION" value="cbor" />
+    <node name="ws_sub_cbor_node" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
+
+    <node name="ws_sub_cbor_node2" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
+  </group>
 </launch>
