@@ -333,7 +333,8 @@ void ROSNode::subscribe(WSClient* client, const rbp::SubscribeArgs& args)
             const auto [jsonStr, cborVect, cborRawVect] = encodeMsgToWireFormat(
                 *m_fish, it->second.lastMessageReceivedTime, it->first,
                 it->second.lastMessage, subClient->encoding);
-            sendTopicToClient(subClient.get(), jsonStr, cborVect, cborRawVect);
+            sendTopicToClient(subClient.get(), jsonStr, cborVect, cborRawVect,
+                              ros::Time::now());
         }
     }
     else
@@ -686,10 +687,11 @@ void ROSNode::handleROSMessage(const std::string& topic,
                 if(client->client->isReady())
                 {
                     if(client->throttleRate_ms == 0 ||
-                       ((ros::Time::now() - client->lastTimeMsgSent).toSec() >
+                       ((receivedTime - client->lastTimeMsgSent).toSec() >
                         (client->throttleRate_ms / 1000.)))
                     {
-                        sendTopicToClient(client.get(), jsonStr, cborVect, cborRawVect);
+                        sendTopicToClient(client.get(), jsonStr, cborVect, cborRawVect,
+                                          receivedTime);
                     }
                 }
                 else
@@ -794,10 +796,11 @@ void ROSNode::sendMsgToClient(WSClient* client, const std::string& jsonStr,
 
 void ROSNode::sendTopicToClient(SubscriberClient* client, const std::string& jsonStr,
                                 const std::vector<uint8_t>& cborVect,
-                                const std::vector<uint8_t>& cborRawVect)
+                                const std::vector<uint8_t>& cborRawVect,
+                                const ros::Time& receivedTime)
 {
     sendMsgToClient(client->client, jsonStr, cborVect, cborRawVect, client->encoding);
-    client->lastTimeMsgSent = ros::Time::now();
+    client->lastTimeMsgSent = receivedTime;
 }
 
 void ROSNode::addNewSubscriberClient(WSClient* client,

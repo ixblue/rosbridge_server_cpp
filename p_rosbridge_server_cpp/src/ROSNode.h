@@ -135,7 +135,8 @@ private:
                          rosbridge_protocol::Encoding encoding);
     void sendTopicToClient(SubscriberClient* client, const std::string& jsonStr,
                            const std::vector<uint8_t>& cborVect,
-                           const std::vector<uint8_t>& cborRawVect);
+                           const std::vector<uint8_t>& cborRawVect,
+                           const ros::Time& receivedTime);
     void addNewSubscriberClient(WSClient* client,
                                 const rosbridge_protocol::SubscribeArgs& args);
     void udapteSubscriberClient(SubscriberClient& c,
