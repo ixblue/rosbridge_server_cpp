@@ -762,8 +762,7 @@ void ROSNode::sendStatus(WSClient* client, rbp::StatusLevel level, const std::st
 void ROSNode::sendMsg(WSClient* client, const std::string& msg) const
 {
     ROS_DEBUG_STREAM_NAMED("json", "-> Send on ws: '" << msg << "'");
-    QMetaObject::invokeMethod(client, "sendMsg",
-                              Q_ARG(QString, QString::fromStdString(msg)));
+    client->sendMsg(QString::fromStdString(msg));
 }
 
 void ROSNode::sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg) const
@@ -771,7 +770,7 @@ void ROSNode::sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binary
     ROS_DEBUG_STREAM_NAMED("json", "-> Send binary msg on ws");
     const auto data = QByteArray(reinterpret_cast<const char*>(binaryMsg.data()),
                                  static_cast<int>(binaryMsg.size()));
-    QMetaObject::invokeMethod(client, "sendBinaryMsg", Q_ARG(QByteArray, data));
+    client->sendBinaryMsg(data);
 }
 
 void ROSNode::sendMsgToClient(WSClient* client, const std::string& jsonStr,
