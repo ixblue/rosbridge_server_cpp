@@ -4,7 +4,8 @@
   <version>0.0.0</version>
   <description>The p_rosbridge_server_cpp package</description>
 
-  <maintainer email="rre@todo.todo">rre</maintainer>
+  <maintainer email="romain.reignier@exail.com">Romain Reignier</maintainer>
+  <maintainer email="robin.vanhove@exail.com">Robin Vanhove</maintainer>
 
   <license>MIT</license>
 
@@ -14,7 +15,6 @@
   <build_depend>roscpp</build_depend>
   <build_depend>std_msgs</build_depend>
   <build_depend>rosbridge_cpp_msgs</build_depend>
-  <depend>message_generation</depend>
   <build_export_depend>librosqt</build_export_depend>
   <build_export_depend>ros_babel_fish</build_export_depend>
   <build_export_depend>roscpp</build_export_depend>
@@ -25,7 +25,6 @@
   <exec_depend>roscpp</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>rosbridge_cpp_msgs</exec_depend>
-  <exec_depend>message_runtime</exec_depend>
 
   <!--depend>mdt_msgs</depend-->
 
