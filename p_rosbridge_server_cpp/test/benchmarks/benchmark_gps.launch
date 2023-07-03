@@ -16,14 +16,33 @@
 
   <node name="pub_node" pkg="p_rosbridge_server_cpp" type="benchmark_gps_pub" output="screen" />
 
-  <node name="ws_sub_node" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
 
-  <node name="ws_sub_node2" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
+  <group unless="$(arg subscribe_cbor)">
+
+    <node name="ws_sub_node" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
+
+    <node name="ws_sub_node2" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
+
+    <node name="ws_sub_node3" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
+
+    <node name="ws_sub_node4" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
+
+    <node name="ws_sub_node5" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
+
+  </group>
+
 
   <group if="$(arg subscribe_cbor)">
-    <env name="ROSBRIDGE_COMPRESSION" value="cbor" />
+    <env name="ROSBRIDGE_COMPRESSION" value="cbor-raw" />
     <node name="ws_sub_cbor_node" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
 
     <node name="ws_sub_cbor_node2" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
+
+    <node name="ws_sub_cbor_node3" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
+
+    <node name="ws_sub_cbor_node4" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
+
+    <node name="ws_sub_cbor_node5" pkg="p_rosbridge_server_cpp" type="benchmark_gps_sub.py" output="screen" />
+
   </group>
 </launch>

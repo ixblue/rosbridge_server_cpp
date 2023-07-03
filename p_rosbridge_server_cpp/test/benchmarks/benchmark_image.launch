@@ -17,5 +17,8 @@
 
   <node name="ws_sub_node" pkg="p_rosbridge_server_cpp" type="benchmark_image_sub.py" output="screen" />
   <node name="ws_sub_node2" pkg="p_rosbridge_server_cpp" type="benchmark_image_sub.py" output="screen" />
+  <node name="ws_sub_node3" pkg="p_rosbridge_server_cpp" type="benchmark_image_sub.py" output="screen" />
+  <node name="ws_sub_node4" pkg="p_rosbridge_server_cpp" type="benchmark_image_sub.py" output="screen" />
+  <node name="ws_sub_node5" pkg="p_rosbridge_server_cpp" type="benchmark_image_sub.py" output="screen" />
 
 </launch>
