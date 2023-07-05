@@ -81,6 +81,19 @@ The parameter `actual_port` will be set on startup. This is useful if `port` con
 - `client_count` (*std_msgs/Int32*) : Number of clients connected to the server.
 - `connected_clients` (rosbridge_msgs/ConnectedClients**) : Information on all the connected clients.
 
+## How to install in ROS noetic
+```
+sudo apt install python3-catkin-tools # optionnal
+sudo apt install qtbase5-dev libqt5websockets5-dev ros-noetic-ros-babel-fish ros-noetic-diagnostic-updater
+
+source /opt/ros/noetic/setup.bash
+mkdir -p ws/src
+cd ws/src
+git clone https://github.com/ixblue/rosbridge_server_cpp.git
+git clone https://github.com/1r0b1n0/librosqt.git
+catkin build
+```
+
 ## Tests
 
 rosunit 1.15.8 is needed to make the unit tests work. When using ROS `melodic` the rosunit package must be updated manually.
