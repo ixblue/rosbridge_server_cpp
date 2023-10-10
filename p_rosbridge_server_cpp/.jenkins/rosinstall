@@ -2,3 +2,7 @@
     local-name: librosqt
     uri: ssh://git@git.robopec.com:7999/rob/librosqt.git
     version: master
+- git:
+    local-name: ros_babel_fish
+    uri: https://github.com/1r0b1n0/ros_babel_fish.git
+    version: disable_tests
