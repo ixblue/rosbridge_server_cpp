@@ -259,7 +259,8 @@ void ROSNode::publish(WSClient* client, const rbp::PublishArgs& args)
         {
             ros_babel_fish::BabelFishMessage::Ptr rosMsg =
                 ros_nlohmann_converter::createMsg(*m_fish, it->second.type,
-                                                  ros::Time::now(), args.msg);
+                                                  ros::Time::now(), args.msg,
+                                                  it->second.pub.isLatched());
 
             ROS_DEBUG_STREAM("Publish a msg on topic " << args.topic);
             it->second.pub.publish(rosMsg);

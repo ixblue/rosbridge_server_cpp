@@ -157,7 +157,7 @@ void fillMessageFromJson(const nlohmann::json& json,
 ros_babel_fish::BabelFishMessage::Ptr createMsg(ros_babel_fish::BabelFish& fish,
                                                 const std::string& type,
                                                 const ros::Time& rosTime,
-                                                const nlohmann::json& json)
+                                                const nlohmann::json& json, bool latched)
 {
     ros_babel_fish::Message::Ptr message = fish.createMessage(type);
     auto& compound = message->as<ros_babel_fish::CompoundMessage>();
@@ -174,7 +174,7 @@ ros_babel_fish::BabelFishMessage::Ptr createMsg(ros_babel_fish::BabelFish& fish,
         }
     }
 
-    return fish.translateMessage(message);
+    return fish.translateMessage(*message, latched);
 }
 
 } // namespace ros_nlohmann_converter

@@ -98,6 +98,7 @@ void fillArray(const nlohmann::json& jsonArray,
 ros_babel_fish::BabelFishMessage::Ptr createMsg(ros_babel_fish::BabelFish& fish,
                                                 const std::string& type,
                                                 const ros::Time& rosTime,
-                                                const nlohmann::json& json);
+                                                const nlohmann::json& json,
+                                                bool latched = false);
 
 } // namespace ros_nlohmann_converter
