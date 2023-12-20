@@ -296,7 +296,7 @@ void ROSNode::udapteSubscriberClient(SubscriberClient& c, const rbp::SubscribeAr
     }
     else
     {
-        ROS_DEBUG_STREAM("Client is subscribing once more on the " << args.topic);
+        ROS_INFO_STREAM("Client is subscribing once more on the " << args.topic);
     }
 
     c.throttleRate_ms = std::min(c.throttleRate_ms, args.throttleRate);
@@ -378,7 +378,7 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
         return;
     }
 
-    ROS_INFO_STREAM_NAMED("service", "Call service " << args.serviceName);
+    ROS_INFO_STREAM_NAMED("service", "Call service " << args.serviceName << " from " << client->ipAddress());
     try
     {
         ros_babel_fish::Message::Ptr req = m_fish->createServiceRequest(args.serviceType);

@@ -104,7 +104,10 @@ void WSClient::computeTransferRates()
 
 std::string WSClient::ipAddress() const
 {
-    assert(m_ws != nullptr);
+    if(m_ws == nullptr)
+    {
+        return std::string();
+    }
     return m_ws->peerAddress().toString().toStdString();
 }
 
