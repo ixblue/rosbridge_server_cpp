@@ -1,3 +1,4 @@
+#include <QtGlobal>
 #include <QCoreApplication>
 
 #include <librosqt/QRosCallBackQueue.h>
@@ -10,6 +11,7 @@ int main(int argc, char** argv)
     QCoreApplication app(argc, argv);
     QRosCallBackQueue::replaceGlobalQueue();
     ros::init(argc, argv, "p_rosbridge_server_cpp", ros::init_options::NoSigintHandler);
+    ROS_INFO_STREAM("qt version: " << qVersion());
     ROSNode node;
     node.start();
     return QCoreApplication::exec();
