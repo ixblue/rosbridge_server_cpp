@@ -26,6 +26,11 @@ En plus des fonctionnalités non implémentées, quelques choix de design diffè
 - Le paramètre `type` de la requête `call_service` est obligatoire. La version Python l'ignore et recherche le type avec l'API rosmaster.
 - Un watchdog kill le noeud quand la boucle ROS est bloquée pendant plus de 5s
 
+### Qt version
+Qt 5.14+ corrige certains bugs dans QWebsocketServer : [5s freeze on client disconnection during frame reception](https://github.com/qt/qtwebsockets/commit/b14f5f59a3ae96949e6a33302385a751d6448182) et [connection header size too big](https://github.com/qt/qtwebsockets/commit/cea5603ee1a56bb5d177f35ed3f884345875099e). La version de Qt fourni par Ubuntu 18.04 et 20.04 n'a pas ces correctifs.
+
+Pour utiliser une version Qt plus récente (par exemple /opt/Qt5.15), il faut set les variables CMake ROSBRIDGE_FORCE_CUSTOM_QT et ROSBRIDGE_FORCE_CUSTOM_QT_DIR.
+
 ## Détails d'implémentation
 
 ### Données binaires
@@ -55,7 +60,6 @@ Dans l'autre sens, à partir du JSON, les deux formats sont supportés. Tableau 
 
 - `libqt5websockets5-dev`
 - `roscpp`
-- `librosqt`
 - `ros_babel_fish`
 - `rosbridge_cpp_msgs`
 - `std_msgs`

@@ -5,11 +5,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_compile_options(-Wall -Werror=return-type)
 
+set(ROSBRIDGE_FORCE_CUSTOM_QT OFF CACHE BOOL "For qt from /opt/Qt5.15/lib")
+set(ROSBRIDGE_FORCE_CUSTOM_QT_DIR "/opt/Qt5.15" CACHE STRING "Directory of custom Qt installation")
+
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 set(CATKIN_DEPS
-    librosqt
     ros_babel_fish
     roscpp
     std_msgs
@@ -23,7 +25,13 @@ find_package(catkin REQUIRED
 # find_package(Boost REQUIRED COMPONENTS system)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
-find_package(Qt5 COMPONENTS Core Network WebSockets REQUIRED)
+
+if(ROSBRIDGE_FORCE_CUSTOM_QT)
+  list(APPEND CMAKE_PREFIX_PATH "${ROSBRIDGE_FORCE_CUSTOM_QT_DIR}/lib/cmake")
+  find_package(Qt5 5.15 REQUIRED COMPONENTS Core Network WebSockets REQUIRED)
+else()
+  find_package(Qt5 COMPONENTS Core Network WebSockets REQUIRED)
+endif()
 
 if(CATKIN_ENABLE_TESTING AND ENABLE_COVERAGE_TESTING)
   find_package(code_coverage REQUIRED)
@@ -66,7 +74,7 @@ include_directories(
 )
 
 ## Declare a C++ library
-add_library(${PROJECT_NAME}
+add_library(${PROJECT_NAME} STATIC
     src/ROSNode.cpp
     src/WSClient.cpp
     src/ServiceCallerWithTimeout.cpp
@@ -74,6 +82,7 @@ add_library(${PROJECT_NAME}
     src/ros_to_nlohmann.cpp
     src/nlohmann_to_ros.cpp
     src/utils/NodeWatchdog.cpp
+    src/librosqt/QRosCallBackQueue.cpp
 )
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
@@ -121,7 +130,14 @@ add_custom_target(rostest_files SOURCES ${ROSTEST_FILES})
 
 ## Mark executables for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
-install(TARGETS ${PROJECT_NAME}_node ${PROJECT_NAME}
+
+if(ROSBRIDGE_FORCE_CUSTOM_QT)
+  # force rpath of installed executable to point to libraries of custom Qt, otherwise it will use system Qt install
+  set_target_properties(${PROJECT_NAME}_node PROPERTIES INSTALL_RPATH "${ROSBRIDGE_FORCE_CUSTOM_QT_DIR}/lib")
+endif()
+
+
+install(TARGETS ${PROJECT_NAME}_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

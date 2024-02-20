@@ -33,6 +33,11 @@ In addition the previous listed unimplemented features, we have some design chan
 
 The watchdog is used to protect this node from freezes. If the main thead blocks, the process will terminate with a SIGABRT. If the `respawn="true"` attribute has been set in the `.launch` file, roslaunch will automatically the process.
 
+### Qt version
+Qt 5.14+ fixes some bugs in QWebsocketServer : [5s freeze on client disconnection during frame reception](https://github.com/qt/qtwebsockets/commit/b14f5f59a3ae96949e6a33302385a751d6448182) and [connection header size too big](https://github.com/qt/qtwebsockets/commit/cea5603ee1a56bb5d177f35ed3f884345875099e). Ubuntu 18.04 and 20.04 is missing these fixes.
+
+If you want to apply these fixes you need to install the newer Qt in another directory (for example /opt/Qt5.15) and set the CMake variables ROSBRIDGE_FORCE_CUSTOM_QT and ROSBRIDGE_FORCE_CUSTOM_QT_DIR.
+
 ## Implementation details
 ### Binary data in JSON objects
 
@@ -59,7 +64,6 @@ Will be encoded as :
 
 - `libqt5websockets5-dev`
 - `roscpp`
-- `librosqt` : https://github.com/1r0b1n0/librosqt
 - `ros_babel_fish`
 - `rosbridge_cpp_msgs`
 - `std_msgs`
