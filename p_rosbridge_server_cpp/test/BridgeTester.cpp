@@ -4,7 +4,6 @@
 #include <librosqt/QRosCallBackQueue.h>
 #include <std_msgs/String.h>
 #include <std_srvs/SetBool.h>
-#include <thread>
 
 #include "ROSNode.h"
 #include "WSClient.h"
@@ -30,6 +29,7 @@ public:
     std::string name() const override { return "mock"; }
 
     void receivedTextMessage(const QString& msg) { emit onWSMessage(msg); }
+    void receivedBinaryMessage(const QByteArray& msg) { emit onWSBinaryMessage(msg); }
 
     std::vector<QString> m_lastSentTextMsgs;
     QByteArray m_lastSentBinaryMsg;
@@ -464,6 +464,41 @@ void BridgeTester::canPublishOnATopicJSON()
 
     client->receivedTextMessage(
         R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})");
+
+    QTest::qWait(PUBLISH_WAIT_TIME_MS);
+
+    QVERIFY(hasReceivedMsg);
+    QCOMPARE(receivedMsg, std::string{"hello"});
+}
+
+void BridgeTester::canAdvertiseAndPublishOnATopicInCBOR()
+{
+    ros::NodeHandle nh;
+    bool hasReceivedMsg = false;
+    std::string receivedMsg;
+    ros::Subscriber pub = nh.subscribe<std_msgs::String>(
+        "/hello", 1,
+        [&hasReceivedMsg, &receivedMsg](const std_msgs::StringConstPtr& msg) {
+            receivedMsg = msg->data;
+            hasReceivedMsg = true;
+        });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSBinaryMessage, &node, &ROSNode::onWSBinaryMessage);
+    const auto cborAdv = nlohmann::json::to_cbor(
+        R"({"op":"advertise","topic":"/hello","type":"std_msgs/String"})"_json);
+    const auto advMsg =
+        QByteArray(reinterpret_cast<const char*>(cborAdv.data()), cborAdv.size());
+    // Send JSON to mock socket
+    client->receivedBinaryMessage(advMsg);
+
+    const auto cborPub = nlohmann::json::to_cbor(
+        R"({"op":"publish","topic":"/hello","msg":{"data":"hello"}})"_json);
+    const auto pubMsg =
+        QByteArray(reinterpret_cast<const char*>(cborPub.data()), cborPub.size());
+    client->receivedBinaryMessage(pubMsg);
 
     QTest::qWait(PUBLISH_WAIT_TIME_MS);
 
@@ -935,7 +970,7 @@ void BridgeTester::canCallAServiceWithId()
     QCOMPARE(jsonStr, expectedJsonStr);
 }
 
-void BridgeTester::canCallAServiceCBOR()
+void BridgeTester::canCallAServiceWithACBORResponse()
 {
     ros::NodeHandle nh;
     bool serviceHasBeenCalled = false;
@@ -965,6 +1000,52 @@ void BridgeTester::canCallAServiceCBOR()
     QTest::qWait(40);
 
     QVERIFY(!client->m_lastSentBinaryMsg.isEmpty());
+
+    QVERIFY(serviceHasBeenCalled);
+    QVERIFY(serviceReq);
+
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJson =
+        R"({"op":"service_response","service":"/set_bool","values":{"success":true,"message":"ok"},"result":true})"_json;
+    const auto expectedCborData = nlohmann::json::to_cbor(expectedJson);
+    QCOMPARE(client->m_lastSentBinaryMsg,
+             QByteArray(reinterpret_cast<const char*>(expectedCborData.data()),
+                        expectedCborData.size()));
+}
+
+void BridgeTester::canCallAServiceWithACBORRequestAndResponse()
+{
+    ros::NodeHandle nh;
+    bool serviceHasBeenCalled = false;
+    bool serviceReq = false;
+    ros::ServiceServer service =
+        nh.advertiseService<std_srvs::SetBoolRequest, std_srvs::SetBoolResponse>(
+            "/set_bool",
+            [&serviceHasBeenCalled, &serviceReq](std_srvs::SetBoolRequest& req,
+                                                 std_srvs::SetBoolResponse& res) {
+                serviceHasBeenCalled = true;
+                serviceReq = req.data;
+                res.success = true;
+                res.message = "ok";
+                return true;
+            });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSBinaryMessage, &node, &ROSNode::onWSBinaryMessage);
+
+    QVERIFY(client->m_lastSentBinaryMsg.isEmpty());
+    const auto cborRequest = nlohmann::json::to_cbor(
+        R"({"op":"call_service","service":"/set_bool","type":"std_srvs/SetBool","args":{"data":true},"compression":"cbor"})"_json);
+    const auto reqMsg =
+        QByteArray(reinterpret_cast<const char*>(cborRequest.data()), cborRequest.size());
+    // Send JSON to mock socket
+    client->receivedBinaryMessage(reqMsg);
+
+    QTest::qWait(40);
+
+    // QVERIFY(!client->m_lastSentBinaryMsg.isEmpty());
 
     QVERIFY(serviceHasBeenCalled);
     QVERIFY(serviceReq);

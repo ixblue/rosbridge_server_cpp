@@ -18,6 +18,7 @@ private slots:
     void canSubscribeToATopicWithoutType();
     void canSubscribeToATopicWithEmptyType();
     void canPublishOnATopicJSON();
+    void canAdvertiseAndPublishOnATopicInCBOR();
     void canPublishOnALatchedTopicAndSubscribeLater();
     void cannotPublishOnANotLatchedTopicAndSubscribeLater();
     void canAdvertiseAndUnadvertiseATopic();
@@ -29,7 +30,8 @@ private slots:
     void canCallAServiceWithDisconnectDuringTimeout();
     void canCallAServiceJSONWithErrorAfterDisconnect();
     void canCallAServiceWithId();
-    void canCallAServiceCBOR();
+    void canCallAServiceWithACBORResponse();
+    void canCallAServiceWithACBORRequestAndResponse();
     void cannotCallAServiceWithBadJSON();
     void cannotCallAServiceWithJSONBadKey();
 };

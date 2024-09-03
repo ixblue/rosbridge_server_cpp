@@ -87,7 +87,7 @@ public:
 
 public slots:
     void onWSMessage(const QString& message);
-    void onWSBinaryMessage(const QByteArray& message) const;
+    void onWSBinaryMessage(const QByteArray& message);
     void onWSClientDisconnected();
 
 private slots:
@@ -123,6 +123,7 @@ signals:
     void deleteServiceClient(const QString& serviceName);
 
 private:
+    void onMessage(WSClient* client, const nlohmann::json& json);
     void handleROSMessage(const std::string& topic,
                           const ros_babel_fish::BabelFishMessage::ConstPtr& msg);
     void sendStatus(WSClient* client, rosbridge_protocol::StatusLevel level,

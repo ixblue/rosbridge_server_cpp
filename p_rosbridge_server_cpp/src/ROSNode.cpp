@@ -476,57 +476,53 @@ void ROSNode::setLevel(const WSClient* client,
                     << rbp::statusLevelStringMap.at(args.level));
 }
 
+void ROSNode::onMessage(WSClient* client, const nlohmann::json& json)
+{
+    if(!json.is_object())
+    {
+        throw std::runtime_error(
+            "Received JSON is not a rosbridge message (not a JSON object)");
+    }
+
+    if(const auto opIt = json.find("op"); opIt != json.end())
+    {
+        const auto op = opIt->get<std::string>();
+
+        std::string id;
+        if(const auto it = json.find("id"); it != json.end())
+        {
+            id = it->get<std::string>();
+        }
+
+        if(const auto it = m_opHandlers.find(op); it != m_opHandlers.end())
+        {
+            it->second(client, json, id);
+        }
+        else
+        {
+            std::ostringstream ss;
+            ss << "Received unkown OP '" << op << "' ignoring.";
+            throw std::runtime_error(ss.str());
+        }
+    }
+    else
+    {
+        throw std::runtime_error(
+            "Received JSON is not a rosbridge message (no 'op' element)");
+    }
+}
+
 void ROSNode::onWSMessage(const QString& message)
 {
     ROS_DEBUG_STREAM_NAMED("json",
-                           "<- Received on ws: '" << message.toStdString() << "'");
+                           "<- Received text on ws: '" << message.toStdString() << "'");
 
     auto* client = qobject_cast<WSClient*>(sender());
 
     try
     {
         const auto json = nlohmann::json::parse(message.toStdString());
-
-        if(!json.is_object())
-        {
-            std::ostringstream ss;
-            ss << "Received JSON is not a rosbridge message (not a JSON object): '"
-               << message.toStdString() << '"';
-            sendStatus(client, rbp::StatusLevel::Error, ss.str());
-            return;
-        }
-
-        if(const auto opIt = json.find("op"); opIt != json.end())
-        {
-            const auto op = opIt->get<std::string>();
-
-            std::string id;
-            if(const auto it = json.find("id"); it != json.end())
-            {
-                id = it->get<std::string>();
-            }
-
-            if(const auto it = m_opHandlers.find(op); it != m_opHandlers.end())
-            {
-                it->second(client, json, id);
-            }
-            else
-            {
-                std::ostringstream ss;
-                ss << "Received unkown OP '" << op << "' ignoring: '"
-                   << message.toStdString() << "'";
-                sendStatus(client, rbp::StatusLevel::Error, ss.str());
-                return;
-            }
-        }
-        else
-        {
-            std::ostringstream ss;
-            ss << "Received JSON is not a rosbridge message (no 'op' element): '"
-               << message.toStdString() << "'";
-            sendStatus(client, rbp::StatusLevel::Error, ss.str());
-            return;
-        }
+        onMessage(client, json);
     }
     catch(const nlohmann::json::exception& e)
     {
@@ -535,12 +531,39 @@ void ROSNode::onWSMessage(const QString& message)
            << message.toStdString() << "'";
         sendStatus(client, rbp::StatusLevel::Error, ss.str());
     }
+    catch(const std::runtime_error& e)
+    {
+        std::ostringstream ss;
+        ss << e.what() << " message: '" << message.toStdString() << "'";
+        sendStatus(client, rbp::StatusLevel::Error, e.what());
+    }
 }
 
-void ROSNode::onWSBinaryMessage(const QByteArray& message) const
+void ROSNode::onWSBinaryMessage(const QByteArray& message)
 {
-    Q_UNUSED(message)
-    ROS_WARN_STREAM("Unhandled binary message received on WS");
+    ROS_DEBUG_STREAM_NAMED("json",
+                           "<- Received " << message.size() << " bytes of binary on ws");
+
+    auto* client = qobject_cast<WSClient*>(sender());
+
+    try
+    {
+        const auto json = nlohmann::json::from_cbor(message);
+        onMessage(client, json);
+    }
+    catch(const nlohmann::json::exception& e)
+    {
+        std::ostringstream ss;
+        ss << "Failed to parse the CBOR message: " << e.what() << " message: '"
+           << message.toHex(' ').toStdString() << "'";
+        sendStatus(client, rbp::StatusLevel::Error, ss.str());
+    }
+    catch(const std::runtime_error& e)
+    {
+        std::ostringstream ss;
+        ss << e.what() << " message: [" << message.toHex(' ').toStdString() << "]";
+        sendStatus(client, rbp::StatusLevel::Error, e.what());
+    }
 }
 
 void ROSNode::onWSClientDisconnected()
@@ -612,7 +635,8 @@ void ROSNode::onNewWSConnection()
         std::make_shared<WSClient>(socket, max_buffer_size_bytes, 1000, m_pongTimeout_s);
     client->connectSignals();
     connect(client.get(), &WSClient::onWSMessage, this, &ROSNode::onWSMessage);
-    connect(client.get(), &WSClient::onWSBinaryMessage, this, &ROSNode::onWSMessage);
+    connect(client.get(), &WSClient::onWSBinaryMessage, this,
+            &ROSNode::onWSBinaryMessage);
 
     // Disconnection is handled with a QueuedConnection to be delayed later.
     // In case of an abort on the WebSocket (buffer full), the WSClient will be removed
@@ -674,10 +698,12 @@ void ROSNode::handleROSMessage(const std::string& topic,
             auto [jsonStr, cborVect, cborRawVect] = encodeMsgToWireFormat(
                 *m_fish, receivedTime, topic, msg, toJson, toCbor, toCborRaw);
 
-            ROS_DEBUG_STREAM_NAMED("topic", "Converted ROS msg on topic "
-                                                << topic << " to wire format(s) in "
-                                                << convertTimer.nsecsElapsed() / 1000
-                                                << " us");
+            ROS_DEBUG_STREAM_NAMED(
+                "topic", "Converted ROS msg on topic "
+                             << topic << " to wire format(s) (json: " << std::boolalpha
+                             << toJson << ", cbor: " << toCbor
+                             << ", cbor-raw: " << toCborRaw << ") in "
+                             << convertTimer.nsecsElapsed() / 1000 << " us");
 
             // Warning, the sendTopicToClient() call can trigger an abort operation on the
             // Websocket, and then remove a client while we are looping on the clients
@@ -770,7 +796,8 @@ void ROSNode::sendMsg(WSClient* client, const std::string& msg) const
 
 void ROSNode::sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg) const
 {
-    ROS_DEBUG_STREAM_NAMED("json", "-> Send binary msg on ws");
+    ROS_DEBUG_STREAM_NAMED("json",
+                           "-> Send binary msg of " << binaryMsg.size() << " on ws");
     const auto data = QByteArray(reinterpret_cast<const char*>(binaryMsg.data()),
                                  static_cast<int>(binaryMsg.size()));
     client->sendBinaryMsg(data);
