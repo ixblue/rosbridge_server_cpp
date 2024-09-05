@@ -1,7 +1,11 @@
+#include <iomanip>
+#include <iostream>
+
 #include <QCoreApplication>
 #include <QDebug>
 
 #include <librosqt/QRosCallBackQueue.h>
+#include <rosbridge_cpp_msgs/SetGetArrays.h>
 #include <std_msgs/String.h>
 #include <std_srvs/SetBool.h>
 
@@ -15,6 +19,28 @@
 constexpr auto PUBLISH_WAIT_TIME_MS = 120;
 
 using namespace std::string_literals;
+
+void printQByteArray(std::string_view msg, const QByteArray& data)
+{
+    std::cerr << msg << ":\n";
+    std::cerr << "[" << data.toHex(' ').toStdString() << "]\n";
+}
+
+template<typename T> void printVector(std::string_view msg, const std::vector<T>& data)
+{
+    std::cerr << msg << ":\n";
+    for(const auto& b : data)
+    {
+        std::cerr << std::hex << static_cast<int>(b) << ' ';
+    }
+    std::cerr << '\n';
+}
+
+template<typename T> void fillVector(std::vector<T>& data, size_t size)
+{
+    data.resize(size);
+    std::iota(data.begin(), data.end(), 0);
+}
 
 class MockWSClient : public WSClient
 {
@@ -721,6 +747,70 @@ void BridgeTester::canCallAServiceJSON()
     QCOMPARE(jsonStr, expectedJsonStr);
 }
 
+void BridgeTester::canCallAServiceJSONWithBase64()
+{
+    ros::NodeHandle nh;
+    bool serviceHasBeenCalled = false;
+    std::vector<uint8_t> reqDataU8;
+    std::vector<int8_t> reqDataI8;
+    std::vector<int16_t> reqDataI16;
+    ros::ServiceServer service =
+        nh.advertiseService<rosbridge_cpp_msgs::SetGetArraysRequest,
+                            rosbridge_cpp_msgs::SetGetArraysResponse>(
+            "/set_get_binary",
+            [&serviceHasBeenCalled, &reqDataU8, &reqDataI8,
+             &reqDataI16](rosbridge_cpp_msgs::SetGetArraysRequest& req,
+                          rosbridge_cpp_msgs::SetGetArraysResponse& res) {
+                serviceHasBeenCalled = true;
+                reqDataU8 = req.data_u8;
+                reqDataI8 = req.data_i8;
+                reqDataI16 = req.data_i16;
+                res.data_u8 = req.data_u8;
+                res.data_i8 = req.data_i8;
+                res.data_i16 = req.data_i16;
+                return true;
+            });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSMessage, &node, &ROSNode::onWSMessage);
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+    const auto message = "Hello World!";
+    const auto data = QByteArray(message).toBase64();
+    // Send JSON to mock socket
+    client->receivedTextMessage(
+        QStringLiteral(
+            R"({"op":"call_service","service":"/set_get_binary","type":"rosbridge_cpp_msgs/SetGetArrays","args":{"data_u8":"%1", "data_i8":"%1","data_i16":[0, 1, 2, 3, 4]}})")
+            .arg(QString(data)));
+
+    QTest::qWait(40);
+
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 1UL);
+
+    QVERIFY(serviceHasBeenCalled);
+    QCOMPARE(
+        std::string(reinterpret_cast<const char*>(reqDataU8.data()), reqDataU8.size()),
+        std::string(message));
+    QCOMPARE(
+        std::string(reinterpret_cast<const char*>(reqDataI8.data()), reqDataI8.size()),
+        std::string(message));
+    std::vector<int16_t> expectedDataI16;
+    fillVector(expectedDataI16, 5);
+    QCOMPARE(reqDataI16, expectedDataI16);
+
+    // Encode and decode JSON to get comparable strings
+    const auto expectedJsonStr =
+        R"({"op":"service_response","service":"/set_get_binary","values":{"data_u8":"SGVsbG8gV29ybGQh","data_i8":"SGVsbG8gV29ybGQh","data_i16":[0, 1, 2, 3, 4]},"result":true})"_json
+            .dump();
+    const auto jsonStr =
+        nlohmann::json::parse(client->m_lastSentTextMsgs.at(0).toStdString()).dump();
+    // std::cerr << "received JSON: '" << jsonStr << "'\n";
+    // std::cerr << "expected JSON: '" << expectedJsonStr << "'\n";
+    QCOMPARE(jsonStr, expectedJsonStr);
+}
+
 void BridgeTester::canCallAServiceJSONWithError()
 {
     ros::NodeHandle nh;
@@ -1045,8 +1135,7 @@ void BridgeTester::canCallAServiceWithACBORRequestAndResponse()
 
     QTest::qWait(40);
 
-    // QVERIFY(!client->m_lastSentBinaryMsg.isEmpty());
-
+    QVERIFY(!client->m_lastSentBinaryMsg.isEmpty());
     QVERIFY(serviceHasBeenCalled);
     QVERIFY(serviceReq);
 
@@ -1057,6 +1146,91 @@ void BridgeTester::canCallAServiceWithACBORRequestAndResponse()
     QCOMPARE(client->m_lastSentBinaryMsg,
              QByteArray(reinterpret_cast<const char*>(expectedCborData.data()),
                         expectedCborData.size()));
+}
+
+void BridgeTester::canCallAServiceCBORWithBinary()
+{
+    ros::NodeHandle nh;
+    bool serviceHasBeenCalled = false;
+    std::vector<uint8_t> reqDataU8;
+    std::vector<int8_t> reqDataI8;
+    std::vector<int16_t> reqDataI16;
+    ros::ServiceServer service =
+        nh.advertiseService<rosbridge_cpp_msgs::SetGetArraysRequest,
+                            rosbridge_cpp_msgs::SetGetArraysResponse>(
+            "/set_get_binary",
+            [&serviceHasBeenCalled, &reqDataU8, &reqDataI8,
+             &reqDataI16](rosbridge_cpp_msgs::SetGetArraysRequest& req,
+                          rosbridge_cpp_msgs::SetGetArraysResponse& res) {
+                serviceHasBeenCalled = true;
+                reqDataU8 = req.data_u8;
+                reqDataI8 = req.data_i8;
+                reqDataI16 = req.data_i16;
+                res.data_u8 = req.data_u8;
+                res.data_i8 = req.data_i8;
+                res.data_i16 = req.data_i16;
+                return true;
+            });
+
+    // Create on heap because will call deleteLater in destructor
+    auto client = new MockWSClient();
+    ROSNode node;
+    connect(client, &MockWSClient::onWSBinaryMessage, &node, &ROSNode::onWSBinaryMessage);
+
+    QVERIFY(client->m_lastSentTextMsgs.empty());
+
+    //  Send CBOR to mock socket
+    auto jsonReq =
+        R"({"op":"call_service","service":"/set_get_binary","type":"rosbridge_cpp_msgs/SetGetArrays","args":{"data_u8":"val1","data_i8":"val2","data_i16":"val3"}, "compression":"cbor"})"_json;
+    // Replace data values with binary from std::vector
+    std::vector<uint8_t> dataU{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06}};
+    std::vector<uint8_t> dataI16{{0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04,
+                                  0x00, 0x05, 0x00, 0x06, 0x00}};
+    jsonReq["args"]["data_u8"] = nlohmann::json::binary(dataU);
+    jsonReq["args"]["data_i8"] = nlohmann::json::binary(dataU, 72);
+    jsonReq["args"]["data_i16"] = nlohmann::json::binary(dataI16, 77);
+
+    // Generate CBOR message
+    std::vector<uint8_t> cborReq;
+    nlohmann::json::to_cbor(jsonReq, cborReq);
+    const auto cborMsg = QByteArray(reinterpret_cast<const char*>(cborReq.data()),
+                                    static_cast<int>(cborReq.size()));
+    // printQByteArray("sent request", cborMsg);
+    client->receivedBinaryMessage(cborMsg);
+
+    QTest::qWait(40);
+
+    QCOMPARE(client->m_lastSentTextMsgs.size(), 0UL);
+    QVERIFY(!client->m_lastSentBinaryMsg.isEmpty());
+    QVERIFY(serviceHasBeenCalled);
+
+    std::vector<uint8_t> expectedU8;
+    fillVector(expectedU8, 7);
+    std::vector<int8_t> expectedI8;
+    fillVector(expectedI8, 7);
+    std::vector<int16_t> expectedI16;
+    fillVector(expectedI16, 7);
+
+    // printVector("reqDataI16", reqDataI16);
+    // printVector("expectedI16", expectedI16);
+    QCOMPARE(reqDataU8, expectedU8);
+    QCOMPARE(reqDataI8, expectedI8);
+    QCOMPARE(reqDataI16, expectedI16);
+
+    // Encode and decode CBOR to get comparable strings
+    auto expectedJson =
+        R"({"op":"service_response","service":"/set_get_binary","values":{"data_u8":"val1","data_i8":"val2","data_i16":"val3"},"result":true})"_json;
+    // Replace data values with binary from std::vector
+    expectedJson["values"]["data_u8"] = nlohmann::json::binary(dataU);
+    expectedJson["values"]["data_i8"] = nlohmann::json::binary(dataU, 72);
+    expectedJson["values"]["data_i16"] = nlohmann::json::binary(dataI16, 77);
+    const auto expectedCborData = nlohmann::json::to_cbor(expectedJson);
+    const auto expectedResponse = QByteArray(
+        reinterpret_cast<const char*>(expectedCborData.data()), expectedCborData.size());
+    // printQByteArray("received response", client->m_lastSentBinaryMsg);
+    // printQByteArray("expected response", expectedResponse);
+
+    QCOMPARE(client->m_lastSentBinaryMsg, expectedResponse);
 }
 
 void BridgeTester::cannotCallAServiceWithBadJSON()

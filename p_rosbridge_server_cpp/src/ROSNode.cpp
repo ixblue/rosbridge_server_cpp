@@ -548,7 +548,8 @@ void ROSNode::onWSBinaryMessage(const QByteArray& message)
 
     try
     {
-        const auto json = nlohmann::json::from_cbor(message);
+        const auto json = nlohmann::json::from_cbor(
+            message, true, true, nlohmann::json::cbor_tag_handler_t::store);
         onMessage(client, json);
     }
     catch(const nlohmann::json::exception& e)
@@ -796,8 +797,8 @@ void ROSNode::sendMsg(WSClient* client, const std::string& msg) const
 
 void ROSNode::sendBinaryMsg(WSClient* client, const std::vector<uint8_t>& binaryMsg) const
 {
-    ROS_DEBUG_STREAM_NAMED("json",
-                           "-> Send binary msg of " << binaryMsg.size() << " on ws");
+    ROS_DEBUG_STREAM_NAMED("json", "-> Send binary msg of " << binaryMsg.size()
+                                                            << " bytes on ws");
     const auto data = QByteArray(reinterpret_cast<const char*>(binaryMsg.data()),
                                  static_cast<int>(binaryMsg.size()));
     client->sendBinaryMsg(data);

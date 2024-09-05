@@ -65,6 +65,27 @@ void fillArrayLoop(const U& jsonArray, ros_babel_fish::ArrayMessage<T>& msgArray
 }
 
 template<typename T>
+void fillBinaryArrayLoop(const nlohmann::json::binary_t& jsonArray,
+                         ros_babel_fish::ArrayMessage<T>& msgArray, bool isFixedSize)
+{
+    const auto arrayLength = jsonArray.size() / sizeof(T);
+    const T* valArray = reinterpret_cast<const T*>(jsonArray.data());
+    for(size_t i = 0; i < arrayLength; ++i)
+    {
+        T val = valArray[i];
+
+        if(isFixedSize)
+        {
+            msgArray.assign(i, val);
+        }
+        else
+        {
+            msgArray.push_back(val);
+        }
+    }
+}
+
+template<typename T>
 void fillArray(const nlohmann::json& jsonArray,
                ros_babel_fish::ArrayMessageBase& baseArray)
 {
@@ -74,24 +95,31 @@ void fillArray(const nlohmann::json& jsonArray,
         assert(msgArray.length() == jsonArray.size());
     }
 
-    if constexpr(std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>)
+    if(jsonArray.is_binary())
     {
-        if(jsonArray.is_string())
+        fillBinaryArrayLoop(jsonArray.get_binary(), msgArray, msgArray.isFixedSize());
+    }
+    else
+    {
+        if constexpr(std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>)
         {
-            // Special case is encoded as base64
-            const QByteArray b64Data =
-                QByteArray::fromStdString(jsonArray.get<std::string>());
-            const QByteArray data = QByteArray::fromBase64(b64Data);
-            fillArrayLoop(data, msgArray, msgArray.isFixedSize());
+            if(jsonArray.is_string())
+            {
+                // Special case is encoded as base64
+                const QByteArray b64Data =
+                    QByteArray::fromStdString(jsonArray.get<std::string>());
+                const QByteArray data = QByteArray::fromBase64(b64Data);
+                fillArrayLoop(data, msgArray, msgArray.isFixedSize());
+            }
+            else
+            {
+                fillArrayLoop(jsonArray, msgArray, msgArray.isFixedSize());
+            }
         }
         else
         {
             fillArrayLoop(jsonArray, msgArray, msgArray.isFixedSize());
         }
-    }
-    else
-    {
-        fillArrayLoop(jsonArray, msgArray, msgArray.isFixedSize());
     }
 }
 
