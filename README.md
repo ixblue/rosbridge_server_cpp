@@ -28,6 +28,7 @@ In addition the previous listed unimplemented features, we have some design chan
 
 - When using the `call_service` request, the `type` parameter is mandatory. RobotWebTools' rosbridge uses the rosmaster API to find the correct type.
 - A watchdog is activated by default, see more details below
+- CBOR requests are supported (service call, subscribe, advertise...). The response will be in CBOR only if `"compression":"cbor"` is present.
 
 ### Node watchdog
 
