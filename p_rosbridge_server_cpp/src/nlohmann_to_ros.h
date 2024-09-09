@@ -24,6 +24,10 @@ template<typename T, typename U>
 void fillArrayLoop(const U& jsonArray, ros_babel_fish::ArrayMessage<T>& msgArray,
                    bool isFixedSize)
 {
+    if(!isFixedSize)
+    {
+        msgArray.reserve(jsonArray.size());
+    }
     for(size_t i = 0; i < static_cast<size_t>(jsonArray.size()); ++i)
     {
         T val;
@@ -69,6 +73,10 @@ void fillBinaryArrayLoop(const nlohmann::json::binary_t& jsonArray,
                          ros_babel_fish::ArrayMessage<T>& msgArray, bool isFixedSize)
 {
     const auto arrayLength = jsonArray.size() / sizeof(T);
+    if(!isFixedSize)
+    {
+        msgArray.reserve(arrayLength);
+    }
     const T* valArray = reinterpret_cast<const T*>(jsonArray.data());
     for(size_t i = 0; i < arrayLength; ++i)
     {
