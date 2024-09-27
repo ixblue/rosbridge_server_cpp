@@ -25,6 +25,7 @@ En plus des fonctionnalités non implémentées, quelques choix de design diffè
 
 - Le paramètre `type` de la requête `call_service` est obligatoire. La version Python l'ignore et recherche le type avec l'API rosmaster.
 - Un watchdog kill le noeud quand la boucle ROS est bloquée pendant plus de 5s
+- Supporte la réception de requêtes (appel de service, souscription, publication...) en CBOR. La réponse sera en CBOR seulement si `"compression":"cbor"` est présent.
 
 ### Qt version
 Qt 5.14+ corrige certains bugs dans QWebsocketServer : [5s freeze on client disconnection during frame reception](https://github.com/qt/qtwebsockets/commit/b14f5f59a3ae96949e6a33302385a751d6448182) et [connection header size too big](https://github.com/qt/qtwebsockets/commit/cea5603ee1a56bb5d177f35ed3f884345875099e). La version de Qt fourni par Ubuntu 18.04 et 20.04 n'a pas ces correctifs.

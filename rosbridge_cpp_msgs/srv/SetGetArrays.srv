@@ -1,0 +1,7 @@
+uint8[] data_u8
+int8[] data_i8
+int16[] data_i16
+---
+uint8[] data_u8
+int8[] data_i8
+int16[] data_i16

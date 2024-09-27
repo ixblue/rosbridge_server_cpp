@@ -14,6 +14,7 @@
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
+#include <rosbridge_cpp_msgs/Arrays.h>
 #include <sensor_msgs/ChannelFloat32.h>
 #include <sensor_msgs/CompressedImage.h>
 #include <sensor_msgs/Image.h>
@@ -35,7 +36,7 @@ static const ros::Time g_rosTime{34325437, 432427};
 
 // Helper functions to fill ROS msgs
 
-std::string UInt8VecToHexString(const std::vector<uint8_t>& in)
+std::string uint8VecToHexString(const std::vector<uint8_t>& in)
 {
     std::string out;
     out.reserve(in.size() * 3);
@@ -50,7 +51,7 @@ std::string UInt8VecToHexString(const std::vector<uint8_t>& in)
     return out;
 }
 
-std::string UInt8VecToCppVect(const std::vector<uint8_t>& in)
+std::string uint8VecToCppVect(const std::vector<uint8_t>& in)
 {
     std::string out;
     out.reserve(in.size() * 6 + 4);
@@ -66,6 +67,19 @@ std::string UInt8VecToCppVect(const std::vector<uint8_t>& in)
     }
     out += " }";
     return out;
+}
+
+template<typename T> std::vector<uint8_t> toByteVector(const std::vector<T>& vec)
+{
+    return std::vector<std::uint8_t>(reinterpret_cast<const uint8_t*>(vec.data()),
+                                     reinterpret_cast<const uint8_t*>(vec.data()) +
+                                         sizeof(T) * vec.size());
+}
+
+template<typename T> void fillVector(std::vector<T>& data, size_t size)
+{
+    data.resize(size);
+    std::iota(data.begin(), data.end(), 0);
 }
 
 void fillMessage(geometry_msgs::Pose& m)
@@ -255,6 +269,33 @@ void fillMessage(std_msgs::UInt16MultiArray& m, size_t size)
     std::iota(m.data.begin(), m.data.end(), 0);
 }
 
+void fillMessage(rosbridge_cpp_msgs::Arrays& m)
+{
+    const auto size = 4;
+    fillVector(m.data_u8, size);
+    fillVector(m.data_i8, size);
+    fillVector(m.data_u16, size);
+    fillVector(m.data_i16, size);
+    fillVector(m.data_u32, size);
+    fillVector(m.data_i32, size);
+    fillVector(m.data_u64, size);
+    fillVector(m.data_i64, size);
+    fillVector(m.data_f32, size);
+    fillVector(m.data_f64, size);
+}
+
+template<typename T>
+inline void checkArray(const ros_babel_fish::Message& msg, const std::vector<T>& expected)
+{
+    auto& base = msg.as<ros_babel_fish::ArrayMessageBase>();
+    auto& array = base.as<ros_babel_fish::ArrayMessage<T>>();
+    ASSERT_EQ(array.length(), expected.size());
+    for(size_t i = 0; i < expected.size(); ++i)
+    {
+        EXPECT_EQ(array[i], expected[i]);
+    }
+}
+
 template<typename T>
 ros_babel_fish::BabelFishMessage serializeMessage(ros_babel_fish::BabelFish& fish,
                                                   const T& msg)
@@ -294,7 +335,7 @@ public:
     virtual std::string cborToJsonString(const std::vector<uint8_t>& cbor) = 0;
 
     virtual std::vector<uint8_t>
-    getMsgBinaryFromCborRaw(const std::vector<uint8_t>& cbor) = 0;
+    getMsgArraysFromCborRaw(const std::vector<uint8_t>& cbor) = 0;
 
     virtual std::string
     getJsonWithoutBytesFromCborRaw(const std::vector<uint8_t>& cbor) = 0;
@@ -341,7 +382,7 @@ public:
     }
 
     std::vector<uint8_t>
-    getMsgBinaryFromCborRaw(const std::vector<uint8_t>& cbor) override
+    getMsgArraysFromCborRaw(const std::vector<uint8_t>& cbor) override
     {
         return nlohmann::json::from_cbor(cbor)["msg"]["bytes"].get_binary();
     }
@@ -365,6 +406,10 @@ using ParserTypes = testing::Types<NlohmannJSONParser>;
 
 // Defini les types sur lesquels faire les tests
 TYPED_TEST_CASE(JSONTester, ParserTypes);
+
+/////////////////
+/// JSON to ROS
+/////////////////
 
 TYPED_TEST(JSONTester, CanFillStringMsgFromJson)
 {
@@ -1228,13 +1273,67 @@ TYPED_TEST(JSONTester, CannotFillSetCameraInfoSrvReqFromBadJson)
                  std::runtime_error);
 }
 
+TYPED_TEST(JSONTester, CanFillArraysFromJson)
+{
+    const auto jsonData =
+        R"({"data_u8":[0, 1, 2, 3],"data_i8":[0, 1, 2, 3],"data_u16":[0, 1, 2, 3],"data_i16":[0, 1, 2, 3],"data_u32":[0, 1, 2, 3],"data_i32":[0, 1, 2, 3],"data_u64":[0, 1, 2, 3],"data_i64":[0, 1, 2, 3],"data_f32":[0.0, 1.0, 2.0, 3.0],"data_f64":[0.0, 1.0, 2.0, 3.0]})";
+
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
+                        g_fish, "rosbridge_cpp_msgs/Arrays", g_rosTime, jsonData));
+    ros_babel_fish::TranslatedMessage::Ptr translated = g_fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+
+    rosbridge_cpp_msgs::Arrays expectedMsg;
+    fillMessage(expectedMsg);
+
+    checkArray(compound["data_u8"], expectedMsg.data_u8);
+    checkArray(compound["data_i8"], expectedMsg.data_i8);
+    checkArray(compound["data_u16"], expectedMsg.data_u16);
+    checkArray(compound["data_i16"], expectedMsg.data_i16);
+    checkArray(compound["data_u32"], expectedMsg.data_u32);
+    checkArray(compound["data_i32"], expectedMsg.data_i32);
+    checkArray(compound["data_u64"], expectedMsg.data_u64);
+    checkArray(compound["data_i64"], expectedMsg.data_i64);
+    checkArray(compound["data_f32"], expectedMsg.data_f32);
+    checkArray(compound["data_f64"], expectedMsg.data_f64);
+}
+
+TYPED_TEST(JSONTester, CanFillArraysFromJsonWithBase64)
+{
+    // uint8[] and int8_t encoded as base64
+    const auto jsonData =
+        R"({"data_u8":"AAECAw==","data_i8":"AAECAw==","data_u16":[0, 1, 2, 3],"data_i16":[0, 1, 2, 3],"data_u32":[0, 1, 2, 3],"data_i32":[0, 1, 2, 3],"data_u64":[0, 1, 2, 3],"data_i64":[0, 1, 2, 3],"data_f32":[0.0, 1.0, 2.0, 3.0],"data_f64":[0.0, 1.0, 2.0, 3.0]})";
+
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
+                        g_fish, "rosbridge_cpp_msgs/Arrays", g_rosTime, jsonData));
+    ros_babel_fish::TranslatedMessage::Ptr translated = g_fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+
+    rosbridge_cpp_msgs::Arrays expectedMsg;
+    fillMessage(expectedMsg);
+
+    checkArray(compound["data_u8"], expectedMsg.data_u8);
+    checkArray(compound["data_i8"], expectedMsg.data_i8);
+    checkArray(compound["data_u16"], expectedMsg.data_u16);
+    checkArray(compound["data_i16"], expectedMsg.data_i16);
+    checkArray(compound["data_u32"], expectedMsg.data_u32);
+    checkArray(compound["data_i32"], expectedMsg.data_i32);
+    checkArray(compound["data_u64"], expectedMsg.data_u64);
+    checkArray(compound["data_i64"], expectedMsg.data_i64);
+    checkArray(compound["data_f32"], expectedMsg.data_f32);
+    checkArray(compound["data_f64"], expectedMsg.data_f64);
+}
+
 /////////////////
 /// ROS to JSON
 /////////////////
 
 TYPED_TEST(JSONTester, CanConvertSerializedPoseStampedToJson)
 {
-
     geometry_msgs::PoseStamped msg;
     fillMessage(msg);
     auto bfMsg = serializeMessage(g_fish, msg);
@@ -1250,7 +1349,6 @@ TYPED_TEST(JSONTester, CanConvertSerializedPoseStampedToJson)
 
 TYPED_TEST(JSONTester, CanConvertSerializedPoseStampedToJsonTwice)
 {
-
     geometry_msgs::PoseStamped msg;
     fillMessage(msg);
     auto bfMsg = serializeMessage(g_fish, msg);
@@ -1270,7 +1368,6 @@ TYPED_TEST(JSONTester, CanConvertSerializedPoseStampedToJsonTwice)
 
 TYPED_TEST(JSONTester, CanConvertNavSatFixToJson)
 {
-
     sensor_msgs::NavSatFix msg;
     fillMessage(msg);
     auto bfMsg = serializeMessage(g_fish, msg);
@@ -1284,7 +1381,6 @@ TYPED_TEST(JSONTester, CanConvertNavSatFixToJson)
 
 TYPED_TEST(JSONTester, CanConvertDiagnosticArrayToJson)
 {
-
     diagnostic_msgs::DiagnosticArray msg;
     fillMessage(msg);
     auto bfMsg = serializeMessage(g_fish, msg);
@@ -1298,7 +1394,6 @@ TYPED_TEST(JSONTester, CanConvertDiagnosticArrayToJson)
 
 TYPED_TEST(JSONTester, CanConvertImageToJson)
 {
-
     sensor_msgs::Image msg;
     fillMessage(msg);
 
@@ -1310,9 +1405,9 @@ TYPED_TEST(JSONTester, CanConvertImageToJson)
     const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
     EXPECT_EQ(json, expectedOutput);
 }
+
 TYPED_TEST(JSONTester, CanConvertCompressedImageToJson)
 {
-
     sensor_msgs::CompressedImage msg;
     fillMessage(msg);
     auto bfMsg = serializeMessage(g_fish, msg);
@@ -1326,7 +1421,6 @@ TYPED_TEST(JSONTester, CanConvertCompressedImageToJson)
 
 TYPED_TEST(JSONTester, CanConvertFloat64ToJson)
 {
-
     std_msgs::Float64 msg;
     msg.data = 3.14;
     auto bfMsg = serializeMessage(g_fish, msg);
@@ -1339,7 +1433,6 @@ TYPED_TEST(JSONTester, CanConvertFloat64ToJson)
 
 TYPED_TEST(JSONTester, CanConvertFloat64InfinityToJson)
 {
-
     std_msgs::Float64 msg;
     msg.data = std::numeric_limits<double>::infinity();
     auto bfMsg = serializeMessage(g_fish, msg);
@@ -1352,7 +1445,6 @@ TYPED_TEST(JSONTester, CanConvertFloat64InfinityToJson)
 
 TYPED_TEST(JSONTester, CanConvertFloat64NaNToJson)
 {
-
     std_msgs::Float64 msg;
     msg.data = std::numeric_limits<double>::quiet_NaN();
     auto bfMsg = serializeMessage(g_fish, msg);
@@ -1365,7 +1457,6 @@ TYPED_TEST(JSONTester, CanConvertFloat64NaNToJson)
 
 TYPED_TEST(JSONTester, CanConvertChannelFloat32ToJson)
 {
-
     sensor_msgs::ChannelFloat32 msg;
     fillMessage(msg);
     auto bfMsg = serializeMessage(g_fish, msg);
@@ -1377,7 +1468,6 @@ TYPED_TEST(JSONTester, CanConvertChannelFloat32ToJson)
 
 TYPED_TEST(JSONTester, CanConvertEmptyChannelFloat32ToJson)
 {
-
     sensor_msgs::ChannelFloat32 msg;
     msg.name = "channel name";
     auto bfMsg = serializeMessage(g_fish, msg);
@@ -1390,7 +1480,6 @@ TYPED_TEST(JSONTester, CanConvertEmptyChannelFloat32ToJson)
 
 TYPED_TEST(JSONTester, CanConvertChannelFloat32WithNaNAndInfinityToJson)
 {
-
     sensor_msgs::ChannelFloat32 msg;
     msg.name = "channel name";
     msg.values.push_back(1.0);
@@ -1406,7 +1495,6 @@ TYPED_TEST(JSONTester, CanConvertChannelFloat32WithNaNAndInfinityToJson)
 
 TYPED_TEST(JSONTester, CanConvertInt16MultiArrayToJson)
 {
-
     std_msgs::Int16MultiArray msg;
     fillMessage(msg, 10);
     auto bfMsg = serializeMessage(g_fish, msg);
@@ -1420,7 +1508,6 @@ TYPED_TEST(JSONTester, CanConvertInt16MultiArrayToJson)
 
 TYPED_TEST(JSONTester, CanConvertUInt16MultiArrayToJson)
 {
-
     std_msgs::UInt16MultiArray msg;
     fillMessage(msg, 10);
     auto bfMsg = serializeMessage(g_fish, msg);
@@ -1448,14 +1535,13 @@ TYPED_TEST(JSONTester, CanConvertInt64MultiArrayToJson)
 
 TYPED_TEST(JSONTester, CanConvertBigInt64MultiArrayToJson)
 {
-
     std_msgs::Int64MultiArray msg;
     fillMessage(msg, 10000);
     auto bfMsg = serializeMessage(g_fish, msg);
     QElapsedTimer t;
     t.start();
     const std::string json = this->parser.toJsonString(g_fish, bfMsg);
-    std::cerr << "serialized to JSON in " << t.nsecsElapsed() << " nsec\n";
+    // std::cerr << "serialized to JSON in " << t.nsecsElapsed() << " nsec\n";
 
     EXPECT_GT(json.size(), 10000u);
 }
@@ -1486,13 +1572,66 @@ TYPED_TEST(JSONTester, CanConvertNonUtf8StringToJson)
     EXPECT_EQ(json, expectedOutput);
 }
 
+TYPED_TEST(JSONTester, CanConvertArraysToJson)
+{
+    rosbridge_cpp_msgs::Arrays msg;
+    fillMessage(msg);
+    auto bfMsg = serializeMessage(g_fish, msg);
+    const std::string json = this->parser.toJsonString(g_fish, bfMsg);
+    // uint8[] and int8_t encoded as base64
+    const auto expectedJson =
+        R"({"data_u8":"AAECAw==","data_i8":"AAECAw==","data_u16":[0, 1, 2, 3],"data_i16":[0, 1, 2, 3],"data_u32":[0, 1, 2, 3],"data_i32":[0, 1, 2, 3],"data_u64":[0, 1, 2, 3],"data_i64":[0, 1, 2, 3],"data_f32":[0.0, 1.0, 2.0, 3.0],"data_f64":[0.0, 1.0, 2.0, 3.0]})";
+    const auto expectedOutput = this->parser.parseAndStringify(expectedJson);
+    EXPECT_EQ(json, expectedOutput);
+}
+
+/////////////////
+/// CBOR to ROS
+/////////////////
+
+TYPED_TEST(JSONTester, CanFillArraysMsgFromCBOR)
+{
+    rosbridge_cpp_msgs::Arrays expectedMsg;
+    fillMessage(expectedMsg);
+
+    auto jsonData = nlohmann::json::object_t{};
+    // Fill vectors
+    jsonData["data_u8"] = nlohmann::json::binary(expectedMsg.data_u8);
+    jsonData["data_i8"] = nlohmann::json::binary(toByteVector(expectedMsg.data_i8), 72);
+    jsonData["data_u16"] = nlohmann::json::binary(toByteVector(expectedMsg.data_u16), 69);
+    jsonData["data_i16"] = nlohmann::json::binary(toByteVector(expectedMsg.data_i16), 77);
+    jsonData["data_u32"] = nlohmann::json::binary(toByteVector(expectedMsg.data_u32), 70);
+    jsonData["data_i32"] = nlohmann::json::binary(toByteVector(expectedMsg.data_i32), 78);
+    jsonData["data_u64"] = nlohmann::json::binary(toByteVector(expectedMsg.data_u64), 71);
+    jsonData["data_i64"] = nlohmann::json::binary(toByteVector(expectedMsg.data_i64), 79);
+    jsonData["data_f32"] = nlohmann::json::binary(toByteVector(expectedMsg.data_f32), 85);
+    jsonData["data_f64"] = nlohmann::json::binary(toByteVector(expectedMsg.data_f64), 86);
+
+    ros_babel_fish::BabelFishMessage::Ptr rosMsg;
+    ASSERT_NO_THROW(rosMsg = ros_nlohmann_converter::createMsg(
+                        g_fish, "rosbridge_cpp_msgs/Arrays", g_rosTime, jsonData));
+    ros_babel_fish::TranslatedMessage::Ptr translated = g_fish.translateMessage(rosMsg);
+    auto& compound =
+        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+
+    checkArray(compound["data_u8"], expectedMsg.data_u8);
+    checkArray(compound["data_i8"], expectedMsg.data_i8);
+    checkArray(compound["data_u16"], expectedMsg.data_u16);
+    checkArray(compound["data_i16"], expectedMsg.data_i16);
+    checkArray(compound["data_u32"], expectedMsg.data_u32);
+    checkArray(compound["data_i32"], expectedMsg.data_i32);
+    checkArray(compound["data_u64"], expectedMsg.data_u64);
+    checkArray(compound["data_i64"], expectedMsg.data_i64);
+    checkArray(compound["data_f32"], expectedMsg.data_f32);
+    checkArray(compound["data_f64"], expectedMsg.data_f64);
+}
+
 /////////////////
 /// ROS to CBOR
 /////////////////
 
 TYPED_TEST(JSONTester, CanEncodePoseStampedToJson)
 {
-
     geometry_msgs::PoseStamped msg;
     fillMessage(msg);
     const auto bfMsg = boost::make_shared<ros_babel_fish::BabelFishMessage>(
@@ -1512,7 +1651,6 @@ TYPED_TEST(JSONTester, CanEncodePoseStampedToJson)
 
 TYPED_TEST(JSONTester, CanEncodeInt16MultiArrayToCbor)
 {
-
     std_msgs::Int16MultiArray msg;
     fillMessage(msg, 10);
     const auto bfMsg = boost::make_shared<ros_babel_fish::BabelFishMessage>(
@@ -1529,8 +1667,8 @@ TYPED_TEST(JSONTester, CanEncodeInt16MultiArrayToCbor)
 
     const auto json = this->parser.cborToJsonString(cborVect);
 
-    // std::cout << "cbor string: " << UInt8VecToHexString(cborVect) << "\n";
-    // std::cout << "cbor string: " << UInt8VecToCppVect(cborVect) << "\n";
+    // std::cout << "cbor string: " << uint8VecToHexString(cborVect) << "\n";
+    // std::cout << "cbor string: " << uint8VecToCppVect(cborVect) << "\n";
 
     EXPECT_EQ(json, expectedOutput);
 
@@ -1558,7 +1696,6 @@ TYPED_TEST(JSONTester, CanEncodeInt16MultiArrayToCbor)
 
 TYPED_TEST(JSONTester, CanEncodeImageToCbor)
 {
-
     sensor_msgs::Image msg;
     fillMessage(msg);
     const auto bfMsg = boost::make_shared<ros_babel_fish::BabelFishMessage>(
@@ -1575,8 +1712,8 @@ TYPED_TEST(JSONTester, CanEncodeImageToCbor)
 
     const auto json = this->parser.cborToJsonString(cborVect);
 
-    // std::cout << "cbor string: " << UInt8VecToHexString(cborVect) << "\n";
-    // std::cout << "cbor string: " << UInt8VecToCppVect(cborVect) << "\n";
+    // std::cout << "cbor string: " << uint8VecToHexString(cborVect) << "\n";
+    // std::cout << "cbor string: " << uint8VecToCppVect(cborVect) << "\n";
 
     EXPECT_EQ(json, expectedOutput);
 
@@ -1610,7 +1747,6 @@ TYPED_TEST(JSONTester, CanEncodeImageToCbor)
 
 TYPED_TEST(JSONTester, CanEncodeBigCompressedImageToCbor)
 {
-
     sensor_msgs::CompressedImage msg;
     fillMessage(msg, 100000);
     const auto bfMsg = boost::make_shared<ros_babel_fish::BabelFishMessage>(
@@ -1627,7 +1763,6 @@ TYPED_TEST(JSONTester, CanEncodeBigCompressedImageToCbor)
 
 TYPED_TEST(JSONTester, CanEncodePoseStampedToCbor)
 {
-
     geometry_msgs::PoseStamped msg;
     fillMessage(msg);
     const auto bfMsg = boost::make_shared<ros_babel_fish::BabelFishMessage>(
@@ -1647,9 +1782,53 @@ TYPED_TEST(JSONTester, CanEncodePoseStampedToCbor)
     EXPECT_EQ(json, expectedOutput);
 }
 
+TYPED_TEST(JSONTester, CanConvertArraysToCbor)
+{
+    rosbridge_cpp_msgs::Arrays msg;
+    fillMessage(msg);
+    const auto bfMsg = boost::make_shared<ros_babel_fish::BabelFishMessage>(
+        serializeMessage(g_fish, msg));
+
+    const auto [jsonStr, cborVect, cborRawVect] = ROSNode::encodeMsgToWireFormat(
+        g_fish, g_rosTime, "array", bfMsg, false, true, false);
+    (void)jsonStr;
+    (void)cborRawVect;
+
+    // uint8[] and int8_t encoded as base64
+    auto expectedJson =
+        R"({"op": "publish", "topic": "array", "msg":{"data_u8":[0, 1, 2, 3],"data_i8":[0, 1, 2, 3],"data_u16":[0, 1, 2, 3],"data_i16":[0, 1, 2, 3],"data_u32":[0, 1, 2, 3],"data_i32":[0, 1, 2, 3],"data_u64":[0, 1, 2, 3],"data_i64":[0, 1, 2, 3],"data_f32":[0.0, 1.0, 2.0, 3.0],"data_f64":[0.0, 1.0, 2.0, 3.0]}})"_json;
+    // Fill vectors
+    expectedJson["msg"]["data_u8"] = nlohmann::json::binary(msg.data_u8);
+    expectedJson["msg"]["data_i8"] =
+        nlohmann::json::binary(toByteVector(msg.data_i8), 72);
+    expectedJson["msg"]["data_u16"] =
+        nlohmann::json::binary(toByteVector(msg.data_u16), 69);
+    expectedJson["msg"]["data_i16"] =
+        nlohmann::json::binary(toByteVector(msg.data_i16), 77);
+    expectedJson["msg"]["data_u32"] =
+        nlohmann::json::binary(toByteVector(msg.data_u32), 70);
+    expectedJson["msg"]["data_i32"] =
+        nlohmann::json::binary(toByteVector(msg.data_i32), 78);
+    expectedJson["msg"]["data_u64"] =
+        nlohmann::json::binary(toByteVector(msg.data_u64), 71);
+    expectedJson["msg"]["data_i64"] =
+        nlohmann::json::binary(toByteVector(msg.data_i64), 79);
+    expectedJson["msg"]["data_f32"] =
+        nlohmann::json::binary(toByteVector(msg.data_f32), 85);
+    expectedJson["msg"]["data_f64"] =
+        nlohmann::json::binary(toByteVector(msg.data_f64), 86);
+
+    std::vector<uint8_t> expectedCborVect;
+    nlohmann::json::to_cbor(expectedJson, expectedCborVect);
+
+    // std::cout << "expected cbor: " << uint8VecToHexString(expectedCborVect) << "\n";
+    // std::cout << "received cbor: " << uint8VecToHexString(cborVect) << "\n";
+
+    EXPECT_EQ(cborVect, expectedCborVect);
+}
+
 TYPED_TEST(JSONTester, CanEncodePoseStampedToCborRaw)
 {
-
     geometry_msgs::PoseStamped msg;
     fillMessage(msg);
     const auto bfMsg = boost::make_shared<ros_babel_fish::BabelFishMessage>(
@@ -1660,12 +1839,12 @@ TYPED_TEST(JSONTester, CanEncodePoseStampedToCborRaw)
     (void)jsonStr;
     (void)cborVect;
 
-    const auto expectedBinaryMsg =
+    const auto expectedArraysMsg =
         std::vector<uint8_t>(bfMsg->buffer(), bfMsg->buffer() + bfMsg->size());
 
-    const auto binaryMsg = this->parser.getMsgBinaryFromCborRaw(cborRawVect);
+    const auto binaryMsg = this->parser.getMsgArraysFromCborRaw(cborRawVect);
 
-    EXPECT_EQ(binaryMsg, expectedBinaryMsg);
+    EXPECT_EQ(binaryMsg, expectedArraysMsg);
 
     const auto jsonStrWithoutBytes =
         this->parser.getJsonWithoutBytesFromCborRaw(cborRawVect);
@@ -1679,7 +1858,6 @@ TYPED_TEST(JSONTester, CanEncodePoseStampedToCborRaw)
 
 TYPED_TEST(JSONTester, CanEncodePoseStampedToJsonAndCborAndCborRaw)
 {
-
     geometry_msgs::PoseStamped msg;
     fillMessage(msg);
     const auto bfMsg = boost::make_shared<ros_babel_fish::BabelFishMessage>(
@@ -1705,10 +1883,10 @@ TYPED_TEST(JSONTester, CanEncodePoseStampedToJsonAndCborAndCborRaw)
 
     // Test CborRaw
     {
-        const auto expectedBinaryMsg =
+        const auto expectedArraysMsg =
             std::vector<uint8_t>(bfMsg->buffer(), bfMsg->buffer() + bfMsg->size());
-        const auto binaryMsg = this->parser.getMsgBinaryFromCborRaw(cborRawVect);
-        EXPECT_EQ(binaryMsg, expectedBinaryMsg);
+        const auto binaryMsg = this->parser.getMsgArraysFromCborRaw(cborRawVect);
+        EXPECT_EQ(binaryMsg, expectedArraysMsg);
         const auto jsonStrWithoutBytes =
             this->parser.getJsonWithoutBytesFromCborRaw(cborRawVect);
         const auto expectedJson =
