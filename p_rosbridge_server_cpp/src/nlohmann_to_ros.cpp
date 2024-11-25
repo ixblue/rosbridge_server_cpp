@@ -1,7 +1,10 @@
+#include <boost/algorithm/string/join.hpp>
+
 #include <QByteArray>
 
 #include "nlohmann_to_ros.h"
 
+using namespace std::string_literals;
 using json = nlohmann::json;
 
 namespace ros_nlohmann_converter
@@ -35,121 +38,144 @@ void fillMessageFromJson(const nlohmann::json& json,
 {
     for(const auto& m : json.items())
     {
-        auto& val = message[m.key()];
-        switch(val.type())
+        try
         {
-        case ros_babel_fish::MessageTypes::Array: {
-            auto& base = val.as<ros_babel_fish::ArrayMessageBase>();
-            const auto type = base.elementType();
-            switch(type)
+            auto& val = message[m.key()];
+            switch(val.type())
             {
-            case ros_babel_fish::MessageTypes::None: break;
-            case ros_babel_fish::MessageTypes::Bool:
-                fillArray<bool>(m.value(), base);
+            case ros_babel_fish::MessageTypes::Array: {
+                auto& base = val.as<ros_babel_fish::ArrayMessageBase>();
+                const auto type = base.elementType();
+                switch(type)
+                {
+                case ros_babel_fish::MessageTypes::None: break;
+                case ros_babel_fish::MessageTypes::Bool:
+                    fillArray<bool>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::UInt8:
+                    fillArray<uint8_t>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::UInt16:
+                    fillArray<uint16_t>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::UInt32:
+                    fillArray<uint32_t>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::UInt64:
+                    fillArray<uint64_t>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::Int8:
+                    fillArray<int8_t>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::Int16:
+                    fillArray<int16_t>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::Int32:
+                    fillArray<int32_t>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::Int64:
+                    fillArray<int64_t>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::Float32:
+                    fillArray<float>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::Float64:
+                    fillArray<double>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::Time:
+                    fillArray<ros::Time>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::Duration:
+                    fillArray<ros::Duration>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::String:
+                    fillArray<std::string>(m.value(), base);
+                    break;
+                case ros_babel_fish::MessageTypes::Array:
+                    // Arrays of arrays are actually not supported in the ROS msg format
+                    break;
+                case ros_babel_fish::MessageTypes::Compound: {
+                    fillCompoundArray(m.value(),
+                                      base.as<ros_babel_fish::CompoundArrayMessage>());
+                    break;
+                }
+                }
                 break;
+            }
+            case ros_babel_fish::MessageTypes::Compound: {
+                fillMessageFromJson(m.value(), val.as<ros_babel_fish::CompoundMessage>());
+                break;
+            }
+            case ros_babel_fish::MessageTypes::None: break;
+            case ros_babel_fish::MessageTypes::Bool: val = m.value().get<bool>(); break;
             case ros_babel_fish::MessageTypes::UInt8:
-                fillArray<uint8_t>(m.value(), base);
+                val = m.value().get<uint8_t>();
                 break;
             case ros_babel_fish::MessageTypes::UInt16:
-                fillArray<uint16_t>(m.value(), base);
+                val = m.value().get<uint16_t>();
                 break;
             case ros_babel_fish::MessageTypes::UInt32:
-                fillArray<uint32_t>(m.value(), base);
+                val = m.value().get<uint32_t>();
                 break;
             case ros_babel_fish::MessageTypes::UInt64:
-                fillArray<uint64_t>(m.value(), base);
+                val = m.value().get<uint64_t>();
                 break;
-            case ros_babel_fish::MessageTypes::Int8:
-                fillArray<int8_t>(m.value(), base);
-                break;
+            case ros_babel_fish::MessageTypes::Int8: val = m.value().get<int8_t>(); break;
             case ros_babel_fish::MessageTypes::Int16:
-                fillArray<int16_t>(m.value(), base);
+                val = m.value().get<int16_t>();
                 break;
             case ros_babel_fish::MessageTypes::Int32:
-                fillArray<int32_t>(m.value(), base);
+                val = m.value().get<int32_t>();
                 break;
             case ros_babel_fish::MessageTypes::Int64:
-                fillArray<int64_t>(m.value(), base);
+                val = m.value().get<int64_t>();
                 break;
             case ros_babel_fish::MessageTypes::Float32:
-                fillArray<float>(m.value(), base);
+                try
+                {
+                    val = m.value().get<float>();
+                }
+                catch(const nlohmann::detail::type_error& e)
+                {
+                    (void)e;
+                    val = std::numeric_limits<float>::quiet_NaN();
+                }
                 break;
             case ros_babel_fish::MessageTypes::Float64:
-                fillArray<double>(m.value(), base);
+                try
+                {
+                    val = m.value().get<double>();
+                }
+                catch(const nlohmann::detail::type_error& e)
+                {
+                    (void)e;
+                    val = std::numeric_limits<double>::quiet_NaN();
+                }
                 break;
-            case ros_babel_fish::MessageTypes::Time:
-                fillArray<ros::Time>(m.value(), base);
+            case ros_babel_fish::MessageTypes::Time: {
+                ros::Time rosTime;
+                rosTime.sec = m.value()["secs"].get<uint32_t>();
+                rosTime.nsec = m.value()["nsecs"].get<uint32_t>();
+                val = rosTime;
                 break;
-            case ros_babel_fish::MessageTypes::Duration:
-                fillArray<ros::Duration>(m.value(), base);
+            }
+            case ros_babel_fish::MessageTypes::Duration: {
+                ros::Duration duration;
+                duration.sec = m.value()["secs"].get<int32_t>();
+                duration.nsec = m.value()["nsecs"].get<int32_t>();
+                val = duration;
                 break;
+            }
             case ros_babel_fish::MessageTypes::String:
-                fillArray<std::string>(m.value(), base);
-                break;
-            case ros_babel_fish::MessageTypes::Array:
-                // Arrays of arrays are actually not supported in the ROS msg format
-                break;
-            case ros_babel_fish::MessageTypes::Compound: {
-                fillCompoundArray(m.value(),
-                                  base.as<ros_babel_fish::CompoundArrayMessage>());
+                val = m.value().get<std::string>();
                 break;
             }
-            }
-            break;
         }
-        case ros_babel_fish::MessageTypes::Compound: {
-            fillMessageFromJson(m.value(), val.as<ros_babel_fish::CompoundMessage>());
-            break;
-        }
-        case ros_babel_fish::MessageTypes::None: break;
-        case ros_babel_fish::MessageTypes::Bool: val = m.value().get<bool>(); break;
-        case ros_babel_fish::MessageTypes::UInt8: val = m.value().get<uint8_t>(); break;
-        case ros_babel_fish::MessageTypes::UInt16: val = m.value().get<uint16_t>(); break;
-        case ros_babel_fish::MessageTypes::UInt32: val = m.value().get<uint32_t>(); break;
-        case ros_babel_fish::MessageTypes::UInt64: val = m.value().get<uint64_t>(); break;
-        case ros_babel_fish::MessageTypes::Int8: val = m.value().get<int8_t>(); break;
-        case ros_babel_fish::MessageTypes::Int16: val = m.value().get<int16_t>(); break;
-        case ros_babel_fish::MessageTypes::Int32: val = m.value().get<int32_t>(); break;
-        case ros_babel_fish::MessageTypes::Int64: val = m.value().get<int64_t>(); break;
-        case ros_babel_fish::MessageTypes::Float32:
-            try
-            {
-                val = m.value().get<float>();
-            }
-            catch(const nlohmann::detail::type_error& e)
-            {
-                (void)e;
-                val = std::numeric_limits<float>::quiet_NaN();
-            }
-            break;
-        case ros_babel_fish::MessageTypes::Float64:
-            try
-            {
-                val = m.value().get<double>();
-            }
-            catch(const nlohmann::detail::type_error& e)
-            {
-                (void)e;
-                val = std::numeric_limits<double>::quiet_NaN();
-            }
-            break;
-        case ros_babel_fish::MessageTypes::Time: {
-            ros::Time rosTime;
-            rosTime.sec = m.value()["secs"].get<uint32_t>();
-            rosTime.nsec = m.value()["nsecs"].get<uint32_t>();
-            val = rosTime;
-            break;
-        }
-        case ros_babel_fish::MessageTypes::Duration: {
-            ros::Duration duration;
-            duration.sec = m.value()["secs"].get<int32_t>();
-            duration.nsec = m.value()["nsecs"].get<int32_t>();
-            val = duration;
-            break;
-        }
-        case ros_babel_fish::MessageTypes::String:
-            val = m.value().get<std::string>();
-            break;
+        catch(const std::runtime_error& e)
+        {
+            const std::string keys = boost::algorithm::join(message.keys(), ", ");
+            throw std::runtime_error(e.what() + " for JSON key: '"s + m.key() +
+                                     "'. Available keys in this ROS message: "s + keys);
         }
     }
 }

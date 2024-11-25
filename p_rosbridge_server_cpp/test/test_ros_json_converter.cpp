@@ -31,6 +31,8 @@
 #include "nlohmann_to_ros.h"
 #include "ros_to_nlohmann.h"
 
+using namespace std::string_literals;
+
 static ros_babel_fish::BabelFish g_fish;
 static const ros::Time g_rosTime{34325437, 432427};
 
@@ -1326,6 +1328,52 @@ TYPED_TEST(JSONTester, CanFillArraysFromJsonWithBase64)
     checkArray(compound["data_i64"], expectedMsg.data_i64);
     checkArray(compound["data_f32"], expectedMsg.data_f32);
     checkArray(compound["data_f64"], expectedMsg.data_f64);
+}
+
+TYPED_TEST(JSONTester, CanThrowPreciseErrorWhenBadKeyPresentInJson)
+{
+    const auto jsonData = R"({"dato": "hello"})";
+
+    ASSERT_THROW(
+        this->parser.createMsgFromJson(g_fish, "std_msgs/String", g_rosTime, jsonData),
+        std::runtime_error);
+
+    try
+    {
+        this->parser.createMsgFromJson(g_fish, "std_msgs/String", g_rosTime, jsonData);
+        FAIL() << "Expected std::runtime_error";
+    }
+    catch(std::runtime_error const& err)
+    {
+        EXPECT_EQ(
+            err.what(),
+            "Invalid key! for JSON key: 'dato'. Available keys in this ROS message: data"s);
+    }
+    catch(...)
+    {
+        FAIL() << "Expected std::runtime_error";
+    }
+}
+
+TYPED_TEST(JSONTester, CanThrowPreciseErrorWhenBadKeyPresentInJsonWithSeveralFields)
+{
+    const auto jsonData =
+        R"({"oritation":{"w":4.5,"x":1.2,"y":2.3,"z":3.4},"position":{"x":5.6,"y":6.7,"z":7.8}})";
+    try
+    {
+        this->parser.createMsgFromJson(g_fish, "geometry_msgs/Pose", g_rosTime, jsonData);
+        FAIL() << "Expected std::runtime_error";
+    }
+    catch(std::runtime_error const& err)
+    {
+        EXPECT_EQ(
+            err.what(),
+            "Invalid key! for JSON key: 'oritation'. Available keys in this ROS message: position, orientation"s);
+    }
+    catch(...)
+    {
+        FAIL() << "Expected std::runtime_error";
+    }
 }
 
 /////////////////
