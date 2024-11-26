@@ -919,7 +919,7 @@ void ROSNode::advertiseHandler(WSClient* client, const nlohmann::json& json,
     catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'advertise' msg "s + e.what());
+                   "Error in the received 'advertise' msg: "s + e.what());
     }
 }
 
@@ -936,7 +936,7 @@ void ROSNode::unadvertiseHandler(WSClient* client, const nlohmann::json& json,
     catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'unadvertise' msg "s + e.what());
+                   "Error in the received 'unadvertise' msg: "s + e.what());
     }
 }
 
@@ -963,7 +963,7 @@ void ROSNode::publishHandler(WSClient* client, const nlohmann::json& json,
     catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'publish' msg "s + e.what());
+                   "Error in the received 'publish' msg: "s + e.what());
     }
 }
 
@@ -1006,7 +1006,7 @@ void ROSNode::subscribeHandler(WSClient* client, const nlohmann::json& json,
     catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'subscribe' msg "s + e.what());
+                   "Error in the received 'subscribe' msg: "s + e.what());
     }
 }
 
@@ -1023,7 +1023,7 @@ void ROSNode::unsubscribeHandler(WSClient* client, const nlohmann::json& json,
     catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'unsubscribe' msg "s + e.what());
+                   "Error in the received 'unsubscribe' msg: "s + e.what());
     }
 }
 
@@ -1057,7 +1057,7 @@ void ROSNode::callServiceHandler(WSClient* client, const nlohmann::json& json,
     catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'call_service' msg "s + e.what());
+                   "Error in the received 'call_service' msg: "s + e.what());
     }
 }
 
@@ -1105,7 +1105,7 @@ void ROSNode::setLevelHandler(WSClient* client, const nlohmann::json& json,
     catch(const std::runtime_error& e)
     {
         sendStatus(client, rbp::StatusLevel::Error,
-                   "Received 'set_level' msg "s + e.what());
+                   "Error in the received 'set_level' msg: "s + e.what());
     }
 }
 
