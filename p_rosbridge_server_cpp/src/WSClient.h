@@ -18,8 +18,9 @@ class WSClient : public QObject
 {
     Q_OBJECT
 public:
-    explicit WSClient(QWebSocket* ws, int64_t max_socket_buffer_size_bytes,
-                      int transferRateUpdatePeriod_ms, double pong_timeout_seconds);
+    explicit WSClient(QWebSocket* ws, const int64_t max_socket_buffer_size_bytes,
+                      const int transferRateUpdatePeriod_ms, const double pong_timeout_seconds,
+                      const bool requireAuth);
     virtual ~WSClient();
     void connectSignals();
     void onPingTimer();
@@ -39,6 +40,12 @@ public:
     // Returns an error msg if something wrong happened or an empty string otherwise.
     std::string errorMsg() const;
 
+    // Auth flag to prevent processing messages from client until authentication happens
+    // don't need to filter ros -> client because no subscription messages from client will get processed until auth happens
+    bool isAuthenticated() const;
+    void setAuthenticated(const bool authenticated);
+    void closeIfNotAuthenticated() const;
+
     static constexpr int64_t DEFAULT_BUFFER_SIZE_1000MB = 1'000'000'000;
 
 public slots:
@@ -50,7 +57,7 @@ public slots:
 signals:
     void onWSMessage(const QString& msg);
     void onWSBinaryMessage(const QByteArray& msg);
-    void disconected();
+    void disconnected();
 
 private:
     void abortConnection();
@@ -58,6 +65,8 @@ private:
     QWebSocket* m_ws = nullptr;
     QTimer m_pingTimer;
     ros::Time m_connectionTime;
+    bool m_requireAuth = false;
+    bool m_authenticated = false;
     std::string m_name = "Not yet connected";
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 12, 0)
@@ -74,7 +83,7 @@ private:
     int64_t m_socketBytesToWrite = 0;
 #endif
     // If the internal buffer goes over max, it means more data than a client is able to
-    // receive is being sent and the connection will aborted to avoid consumming too much
+    // receive is being sent and the connection will aborted to avoid consuming too much
     // RAM. This can be due to a disconnection / network freeze (TCP timeout will take a
     // long time to happen) or a client too slow to process the data or network congestion
     // (bandwidth too low / packet loss)

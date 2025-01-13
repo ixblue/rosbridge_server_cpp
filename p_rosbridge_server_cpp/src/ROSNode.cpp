@@ -6,10 +6,12 @@
 #include <stdexcept>
 
 #include <QElapsedTimer>
-#include <QMetaObject>
 #include <QWebSocket>
+#include <QFile>
+#include <QSslKey>
 
 #include <rosbridge_cpp_msgs/WebSocketConnectedClients.h>
+#include <rosauth/Authentication.h>
 #include <std_msgs/Int32.h>
 #include <string>
 
@@ -40,23 +42,66 @@ ROSNode::ROSNode(QObject* parent)
           {"call_service", [this](WSClient* c, const auto& j,
                                   const auto& id) { callServiceHandler(c, j, id); }},
           {"set_level", [this](WSClient* c, const auto& j, const auto& id) {
-               setLevelHandler(c, j, id);
-           }}}
+              setLevelHandler(c, j, id); }},
+          {"auth", [this](WSClient* c, const auto& j, const auto& id) {
+              handleAuthRequest(c, j, id); }}
+      }
 {
     // Parameters
     m_nhPrivate.getParam("port", m_wsPort);
     m_nhPrivate.getParam("service_timeout", m_serviceTimeout);
     m_nhPrivate.getParam("max_wsocket_buffer_size_mbytes", m_maxWebSocketBufferSize_MB);
     m_nhPrivate.getParam("pong_timeout_s", m_pongTimeout_s);
+    m_nhPrivate.getParam("require_authentication", m_requireAuth);
+    m_nhPrivate.getParam("require_ssl", m_requireSsl);
+    m_nhPrivate.getParam("ssl_cert_file", m_sslCertFile);
+    m_nhPrivate.getParam("ssl_key_file", m_sslKeyFile);
 
     m_clientsCountPub = m_nhNs.advertise<std_msgs::Int32>("client_count", 10, true);
     m_connectedClientsPub =
         m_nhNs.advertise<rosbridge_cpp_msgs::WebSocketConnectedClients>(
             "connected_clients", 10, true);
 
-    connect(&m_wsServer, &QWebSocketServer::newConnection, this,
+    if (m_requireAuth)
+    {
+        m_authServiceClient = m_nhPrivate.serviceClient<rosauth::AuthenticationRequest>("/authenticate");
+    }
+
+    m_wsServer = new QWebSocketServer(QStringLiteral("rosbridge_server"),
+        (m_requireSsl ? QWebSocketServer::SecureMode : QWebSocketServer::NonSecureMode));
+    connect(m_wsServer, &QWebSocketServer::newConnection, this,
             &ROSNode::onNewWSConnection);
-    connect(&m_wsServer, &QWebSocketServer::serverError, this, &ROSNode::onWSServerError);
+    connect(m_wsServer, &QWebSocketServer::serverError, this, &ROSNode::onWSServerError);
+
+    if (m_requireSsl)
+    {
+        ROS_DEBUG_STREAM_NAMED("security", "Setting up ssl with certFile " << m_sslCertFile << " and keyFile " << m_sslKeyFile);
+        try
+        {
+            QSslConfiguration sslConfiguration;
+            QFile certFile(QString::fromStdString(m_sslCertFile));
+            QFile keyFile(QString::fromStdString(m_sslKeyFile));
+            certFile.open(QIODevice::ReadOnly);
+            keyFile.open(QIODevice::ReadOnly);
+            const QSslCertificate certificate(&certFile, QSsl::Pem);
+            const QSslKey sslKey(&keyFile, QSsl::Rsa, QSsl::Pem);
+            certFile.close();
+            keyFile.close();
+            sslConfiguration.setPeerVerifyMode(QSslSocket::VerifyNone);
+            sslConfiguration.setLocalCertificate(certificate);
+            sslConfiguration.setPrivateKey(sslKey);
+            m_wsServer->setSslConfiguration(sslConfiguration);
+        }
+        catch (std::exception& e)
+        {
+            ROS_ERROR_STREAM_NAMED("security", "Failed to set up SSL configuration! " << e.what());
+            throw std::runtime_error("Failed to set up SSL configuration!");
+        }
+    }
+    else
+    {
+        ROS_DEBUG_STREAM_NAMED("security", "SSL not required");
+    }
 
     m_fish = std::make_shared<ros_babel_fish::BabelFish>();
 
@@ -71,15 +116,15 @@ ROSNode::ROSNode(QObject* parent)
 
 void ROSNode::start()
 {
-    if(!m_wsServer.listen(QHostAddress::Any, static_cast<uint16_t>(m_wsPort)))
+    if(!m_wsServer->listen(QHostAddress::Any, static_cast<uint16_t>(m_wsPort)))
     {
         ROS_FATAL_STREAM("Failed to start WS server on port "
-                         << m_wsPort << ": " << m_wsServer.errorString().toStdString());
+                         << m_wsPort << ": " << m_wsServer->errorString().toStdString());
         QCoreApplication::exit(1);
     }
 
-    ROS_INFO_STREAM("Start WS on port: " << m_wsServer.serverPort());
-    m_nhPrivate.setParam("actual_port", m_wsServer.serverPort());
+    ROS_INFO_STREAM("Start WS on port: " << m_wsServer->serverPort());
+    m_nhPrivate.setParam("actual_port", m_wsServer->serverPort());
 
     publishStats();
 }
@@ -282,7 +327,7 @@ void ROSNode::publish(WSClient* client, const rbp::PublishArgs& args)
     }
 }
 
-void ROSNode::udapteSubscriberClient(SubscriberClient& c, const rbp::SubscribeArgs& args)
+void ROSNode::updateSubscriberClient(SubscriberClient& c, const rbp::SubscribeArgs& args)
 {
     if(c.compression != args.compression)
     {
@@ -317,7 +362,7 @@ void ROSNode::subscribe(WSClient* client, const rbp::SubscribeArgs& args)
                [&client](const auto& clientSub) { return clientSub->client == client; });
            clientIt != it->second.clients.end())
         {
-            udapteSubscriberClient(*(*clientIt), args);
+            updateSubscriberClient(*(*clientIt), args);
             subClient = *clientIt;
         }
         else
@@ -495,6 +540,13 @@ void ROSNode::onWSMessage(const QString& message)
             return;
         }
 
+        const auto jsonOp = json.find("op")->get<std::string>();
+        if(m_requireAuth && (jsonOp != "auth") && (!client->isAuthenticated()))
+        {
+            ROS_DEBUG_STREAM_NAMED("security", "Ignoring message from un-authenticated client");
+            return;
+        }
+
         if(const auto opIt = json.find("op"); opIt != json.end())
         {
             const auto op = opIt->get<std::string>();
@@ -512,7 +564,7 @@ void ROSNode::onWSMessage(const QString& message)
             else
             {
                 std::ostringstream ss;
-                ss << "Received unkown OP '" << op << "' ignoring: '"
+                ss << "Received unknown OP '" << op << "' ignoring: '"
                    << message.toStdString() << "'";
                 sendStatus(client, rbp::StatusLevel::Error, ss.str());
                 return;
@@ -601,23 +653,23 @@ void ROSNode::onWSClientDisconnected()
 
 void ROSNode::onNewWSConnection()
 {
-    QWebSocket* socket = m_wsServer.nextPendingConnection();
+    QWebSocket* socket = m_wsServer->nextPendingConnection();
     ROS_INFO_STREAM("New client connected! "
                     << socket->peerAddress().toString().toStdString() << ":"
                     << socket->peerPort());
 
     const int64_t max_buffer_size_bytes = m_maxWebSocketBufferSize_MB * 1000 * 1000;
     auto client =
-        std::make_shared<WSClient>(socket, max_buffer_size_bytes, 1000, m_pongTimeout_s);
+        std::make_shared<WSClient>(socket, max_buffer_size_bytes, 1000, m_pongTimeout_s, m_requireAuth);
     client->connectSignals();
     connect(client.get(), &WSClient::onWSMessage, this, &ROSNode::onWSMessage);
     connect(client.get(), &WSClient::onWSBinaryMessage, this, &ROSNode::onWSMessage);
 
     // Disconnection is handled with a QueuedConnection to be delayed later.
     // In case of an abort on the WebSocket (buffer full), the WSClient will be removed
-    // will we might be iterating on the list of clients in handleROSMessage() and
+    // while we might be iterating on the list of clients in handleROSMessage() and
     // erasing an element of a vector invalidates the iterators
-    connect(client.get(), &WSClient::disconected, this, &ROSNode::onWSClientDisconnected,
+    connect(client.get(), &WSClient::disconnected, this, &ROSNode::onWSClientDisconnected,
             Qt::QueuedConnection);
 
     m_clients.push_back(client);
@@ -629,7 +681,7 @@ void ROSNode::onWSServerError(QWebSocketProtocol::CloseCode error) const
 {
     ROS_ERROR_STREAM("Websocket server error ("
                      << static_cast<int>(error)
-                     << "): " << m_wsServer.errorString().toStdString());
+                     << "): " << m_wsServer->errorString().toStdString());
 }
 
 void ROSNode::handleROSMessage(const std::string& topic,
@@ -1077,6 +1129,36 @@ void ROSNode::setLevelHandler(WSClient* client, const nlohmann::json& json,
     {
         sendStatus(client, rbp::StatusLevel::Error,
                    "Received 'set_level' msg "s + e.what());
+    }
+}
+
+void ROSNode::handleAuthRequest(WSClient* client, const nlohmann::json& json, const std::string& id)
+{
+    try
+    {
+        ROS_DEBUG_STREAM_NAMED("security", "Received auth request message");
+        rosauth::Authentication auth;
+        auth.request.mac = json.at("mac");
+        auth.request.client = json.at("client");
+        auth.request.dest = json.at("dest");
+        auth.request.rand = json.at("rand");
+        auth.request.t = ros::Time(json.at("t"));
+        auth.request.level = json.at("level");
+        auth.request.end = ros::Time(json.at("end"));
+        m_authServiceClient.call(auth);
+        client->setAuthenticated(auth.response.authenticated);
+        if (auth.response.authenticated)
+        {
+            ROS_DEBUG_STREAM_NAMED("security", "Authentication succeeded");
+        } else
+        {
+            ROS_ERROR_STREAM_NAMED("security", "Authentication failed! Closing socket");
+            client->closeIfNotAuthenticated();
+        }
+    }
+    catch(const std::runtime_error& e)
+    {
+        sendStatus(client, rbp::StatusLevel::Error, "Error handling 'auth' msg "s + e.what());
     }
 }
 

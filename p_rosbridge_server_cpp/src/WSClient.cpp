@@ -6,12 +6,14 @@
 
 #include "WSClient.h"
 
-WSClient::WSClient(QWebSocket* ws, int64_t max_socket_buffer_size_bytes,
-                   int transferRateUpdatePeriod_ms, double pong_timeout_seconds)
+WSClient::WSClient(QWebSocket* ws, const int64_t max_socket_buffer_size_bytes,
+                   const int transferRateUpdatePeriod_ms, const double pong_timeout_seconds,
+                   const bool requireAuth)
     : QObject(nullptr), m_ws{ws}, m_connectionTime{ros::Time::now()},
       m_maxSocketBufferSize{max_socket_buffer_size_bytes},
       m_transferRateUpdatePeriod_ms{transferRateUpdatePeriod_ms},
-      m_pongReceiveTimeout{pong_timeout_seconds}
+      m_pongReceiveTimeout{pong_timeout_seconds},
+      m_requireAuth{requireAuth}
 {
     m_transferRateTimer.setInterval(m_transferRateUpdatePeriod_ms);
     m_transferRateTimer.setSingleShot(false);
@@ -64,6 +66,8 @@ void WSClient::connectSignals()
 
     connect(&m_pingTimer, &QTimer::timeout, this, [this]() { onPingTimer(); });
     m_pingTimer.start(2000);
+
+    QTimer::singleShot(15000, this, &WSClient::closeIfNotAuthenticated);
 }
 
 void WSClient::onPingTimer()
@@ -142,13 +146,32 @@ std::string WSClient::errorMsg() const
     return m_errorMsg;
 }
 
+bool WSClient::isAuthenticated() const
+{
+    return m_authenticated;
+}
+
+void WSClient::setAuthenticated(const bool authenticated)
+{
+    m_authenticated = authenticated;
+}
+
+void WSClient::closeIfNotAuthenticated() const
+{
+    if(!isAuthenticated())
+    {
+        ROS_WARN_STREAM_NAMED("security", "Client " << ipAddress() << " failed to authenticate, closing socket");
+        m_ws->close(QWebSocketProtocol::CloseCodeAbnormalDisconnection, "Failed to authenticate");
+    }
+}
+
 void WSClient::onWSDisconnected()
 {
     ROS_DEBUG_STREAM_NAMED("websocket", "Client Disconnected");
     auto* client = qobject_cast<QWebSocket*>(sender());
     if((client != nullptr) && client == m_ws)
     {
-        emit disconected();
+        emit disconnected();
     }
 }
 
@@ -173,7 +196,7 @@ void WSClient::abortConnection()
                      << ipAddress() << ". Connection aborted");
     // Cannot call disconnect because it requires the current buffer data to be fully sent
     // before trying to gently terminate the TCP connection. It needs to be stopped
-    // immediatly to stop filling the buffer. This will trigger a disconnected signal.
+    // immediately to stop filling the buffer. This will trigger a disconnected signal.
     m_errorMsg = "Connection to client " + ipAddress() +
                  " has been aborted due to network performance issues.";
     m_ws->abort();
