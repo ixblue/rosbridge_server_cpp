@@ -427,7 +427,7 @@ void ROSNode::callService(WSClient* client, const rbp::CallServiceArgs& args)
     {
         ros_babel_fish::Message::Ptr req = m_fish->createServiceRequest(args.serviceType);
         auto& compound = req->as<ros_babel_fish::CompoundMessage>();
-        ros_nlohmann_converter::fillMessageFromJson(args.args, compound);
+        ros_nlohmann_converter::fillMessageFromJson(args.args, compound, ros::Time::now());
 
         // Allocated on heap, will be deleted by calling deleteLater itself later
         // Used to properly delete in the timeoutThread

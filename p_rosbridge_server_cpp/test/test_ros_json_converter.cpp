@@ -19,6 +19,7 @@
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/NavSatFix.h>
 #include <sensor_msgs/SetCameraInfo.h>
+#include <tf2_msgs/TFMessage.h>
 #include <std_msgs/Duration.h>
 #include <std_msgs/Float64.h>
 #include <std_msgs/Int16MultiArray.h>
@@ -318,7 +319,7 @@ public:
         auto json = nlohmann::json::parse(jsonStr);
         ros_babel_fish::Message::Ptr req = fish.createServiceRequest(type);
         auto& compound = req->as<ros_babel_fish::CompoundMessage>();
-        ros_nlohmann_converter::fillMessageFromJson(json, compound);
+        ros_nlohmann_converter::fillMessageFromJson(json, compound, g_rosTime);
         return fish.translateMessage(req);
     }
 
@@ -511,7 +512,7 @@ TYPED_TEST(JSONTester, CanFillPointMsgFromPartialJson)
 
 TYPED_TEST(JSONTester, CanFillPointStampedMsgFromJsonWithHeaderMissing)
 {
-    // position.z is missing
+    // header is missing
     const auto jsonData = R"({"point":{"x":5.6,"y":6.7,"z":7.8}})";
 
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
@@ -531,7 +532,7 @@ TYPED_TEST(JSONTester, CanFillPointStampedMsgFromJsonWithHeaderMissing)
 
 TYPED_TEST(JSONTester, CanFillPointStampedMsgFromJsonWithStampMissing)
 {
-    // position.z is missing
+    // header.stamp is missing
     const auto jsonData =
         R"({"header":{"frame_id":"robot","seq":2},"point":{"x":5.6,"y":6.7,"z":7.8}})";
 
@@ -550,25 +551,30 @@ TYPED_TEST(JSONTester, CanFillPointStampedMsgFromJsonWithStampMissing)
     EXPECT_EQ(compound["point"]["z"].value<double>(), 7.8);
 }
 
-TYPED_TEST(JSONTester, CanFillPointStampedMsggFromJsonWithStampMissing)
+TYPED_TEST(JSONTester, CanFillTfMsgFromJsonWithStampMissing)
 {
-    // position.z is missing
+    // header.stamp is missing for tf message inside list
     const auto jsonData =
-        R"({"header":{"frame_id":"robot","seq":2},"point":{"x":5.6,"y":6.7,"z":7.8}})";
+        R"({"transforms":[{"header":{"seq":42,"frame_id":"datum_origin"},"child_frame_id":"REMOTE_ASSIST_PALLET","transform":{"translation":{"x":19,"y":25,"z":0},"rotation":{"w":0,"x":0,"y":0,"z":1}}}]})";
 
     ros_babel_fish::BabelFishMessage::Ptr rosMsg;
     ASSERT_NO_THROW(rosMsg = this->parser.createMsgFromJson(
-                        g_fish, "geometry_msgs/PointStamped", g_rosTime, jsonData));
+                        g_fish, "tf2_msgs/TFMessage", g_rosTime, jsonData));
     ros_babel_fish::TranslatedMessage::Ptr translated = g_fish.translateMessage(rosMsg);
-    auto& compound =
-        translated->translated_message->as<ros_babel_fish::CompoundMessage>();
-    EXPECT_EQ(compound["header"]["frame_id"].value<std::string>(), "robot");
-    EXPECT_EQ(compound["header"]["seq"].value<uint32_t>(), 2u);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().sec, 34325437u);
-    EXPECT_EQ(compound["header"]["stamp"].value<ros::Time>().nsec, 432427u);
-    EXPECT_EQ(compound["point"]["x"].value<double>(), 5.6);
-    EXPECT_EQ(compound["point"]["y"].value<double>(), 6.7);
-    EXPECT_EQ(compound["point"]["z"].value<double>(), 7.8);
+    auto& msg = translated->translated_message->as<ros_babel_fish::CompoundMessage>();
+    auto& tf = msg["transforms"].as<ros_babel_fish::CompoundArrayMessage>()[0];
+    EXPECT_EQ(tf["header"]["frame_id"].value<std::string>(), "datum_origin");
+    EXPECT_EQ(tf["header"]["seq"].value<uint32_t>(), 42u);
+    EXPECT_EQ(tf["header"]["stamp"].value<ros::Time>().sec, 34325437u);
+    EXPECT_EQ(tf["header"]["stamp"].value<ros::Time>().nsec, 432427u);
+    EXPECT_EQ(tf["child_frame_id"].value<std::string>(), "REMOTE_ASSIST_PALLET");
+    EXPECT_EQ(tf["transform"]["translation"]["x"].value<double>(), 19);
+    EXPECT_EQ(tf["transform"]["translation"]["y"].value<double>(), 25);
+    EXPECT_EQ(tf["transform"]["translation"]["z"].value<double>(), 0);
+    EXPECT_EQ(tf["transform"]["rotation"]["w"].value<double>(), 0);
+    EXPECT_EQ(tf["transform"]["rotation"]["x"].value<double>(), 0);
+    EXPECT_EQ(tf["transform"]["rotation"]["y"].value<double>(), 0);
+    EXPECT_EQ(tf["transform"]["rotation"]["z"].value<double>(), 1);
 }
 
 TYPED_TEST(JSONTester, CanFillNavSatFixFromJSON)
