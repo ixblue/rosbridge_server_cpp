@@ -9,7 +9,7 @@ Il utilise Qt pour l'implémentation Websocket et donc dépend de `libqt5websock
 
 Les "compressions" **JSON**, **CBOR** et **CBOR-RAW** sont supportés mais pas la compression **PNG**.
 
-## Authentification
+### Authentification
 
 Le serveur gérera les messages de requête auth comme spécifié dans le [protocole Rosbridge](https://github.com/RobotWebTools/rosbridge_suite/blob/ros1/ROSBRIDGE_PROTOCOL.md#33-authentication-message). Une instance du nœud de service rosauth doit être en cours d'exécution pour traiter effectivement les requêtes d'authentification.
 

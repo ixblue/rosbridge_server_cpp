@@ -12,7 +12,7 @@ The following compressions are supported :
 - **CBOR**
 - **CBOR-RAW**
 
-## Authentication
+### Authentication
 
 The server will handle `auth` request messages as specified in the [Rosbridge protocol](https://github.com/RobotWebTools/rosbridge_suite/blob/ros1/ROSBRIDGE_PROTOCOL.md#33-authentication-message). An instance of the `rosauth` service node must be running to actually process the authentication requests.
 
@@ -69,7 +69,7 @@ Will be encoded as :
 - `rosbridge_cpp_msgs`
 - `std_msgs`
 
-## Optionnal ROS parameters
+## Optional ROS parameters
 
 - `port` (*int*) : Websocket TCP port. `0` will let the OS attribute a random port (default value: `9090`)
 - `service_timeout` (*double*) : Timeout, in seconds, for service requests (default value: `5.0`)
