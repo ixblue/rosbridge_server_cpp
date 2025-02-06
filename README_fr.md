@@ -9,11 +9,16 @@ Il utilise Qt pour l'implémentation Websocket et donc dépend de `libqt5websock
 
 Les "compressions" **JSON**, **CBOR** et **CBOR-RAW** sont supportés mais pas la compression **PNG**.
 
+## Authentification
+
+Le serveur gérera les messages de requête auth comme spécifié dans le [protocole Rosbridge](https://github.com/RobotWebTools/rosbridge_suite/blob/ros1/ROSBRIDGE_PROTOCOL.md#33-authentication-message). Une instance du nœud de service rosauth doit être en cours d'exécution pour traiter effectivement les requêtes d'authentification.
+
+Si le paramètre require_auth est défini sur true, le serveur ne traitera aucun message (y compris les demandes d'abonnement) tant qu'une authentification réussie n'aura pas été effectuée, et il fermera les sockets qui ne se sont pas authentifiés après un délai d'expiration de 15 secondes.
+
 ### Pas implémenté par rapport à la version Python
 
 - compression PNG
 - paquets fragmentés
-- authentification (`rosauth`)
 - service server
 - Autres transports que Websocket (TCP, UDP)
 - Mode BSON only
@@ -67,6 +72,10 @@ Dans l'autre sens, à partir du JSON, les deux formats sont supportés. Tableau 
 - `pong_timeout_s` (*double*) : Durée de timeout, en secondes, avant que l'on déconnecte le client (défaut = `30.0`)
 - `watchdog_enabled` (*bool*) : Activation du watchdog (défault = `true`)
 - `watchdog_timeout` (*double*) : Timeout du watchdog (défault = `5.0`)
+- `require_auth` (*bool*) : Requiert l'authentification (défaut = `false`)
+- `require_ssl` (*bool*) : Démarrer le serveur Websocket en mode sécurisé (requiert `ssl_cert_file` et `ssl_key_file` à être donnés) (défaut = `false`)
+- `ssl_cert_file` (*string*) : Chemin vers le fichier de certificat SSL (défaut = `""`)
+- `ssl_key_file` (*string*) : Chemin vers le fichier de clé SSL (défaut = `""`)
 
 ## Paramètres set par le nœud
 
