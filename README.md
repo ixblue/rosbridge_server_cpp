@@ -89,13 +89,14 @@ The parameter `actual_port` will be set on startup. This is useful if `port` con
 ## How to install in ROS noetic
 ```
 sudo apt install python3-catkin-tools # optionnal
-sudo apt install qtbase5-dev libqt5websockets5-dev ros-noetic-ros-babel-fish ros-noetic-diagnostic-updater
+sudo apt install qtbase5-dev libqt5websockets5-dev ros-noetic-diagnostic-updater
 
 source /opt/ros/noetic/setup.bash
 mkdir -p ws/src
 cd ws/src
 git clone https://github.com/ixblue/rosbridge_server_cpp.git
 git clone https://github.com/1r0b1n0/librosqt.git
+git clone https://github.com/StefanFabian/ros_babel_fish
 catkin build
 ```
 
