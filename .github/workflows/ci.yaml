@@ -1,0 +1,24 @@
+name: CI
+on:
+  push:
+  pull_request:
+  schedule:
+    # Run every Mondays at 8.30 am
+    - cron: '30 8 * * 1'
+
+jobs:
+  build:
+    name: ROS noetic on focal
+    runs-on: ubuntu-latest
+    container:
+      image: ros:noetic-ros-base-focal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ros-tooling/setup-ros@v0.7
+        with:
+          required-ros-distributions: noetic
+      - uses: ros-tooling/action-ros-ci@v0.3
+        with:
+          package-name: p_rosbridge_server_cpp
+          target-ros1-distro: noetic
+          vcs-repo-file-url: "${{ github.workspace }}/.github/workflows/deps.repos"
