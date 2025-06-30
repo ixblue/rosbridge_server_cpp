@@ -12,11 +12,16 @@ The following compressions are supported :
 - **CBOR**
 - **CBOR-RAW**
 
+### Authentication
+
+The server will handle `auth` request messages as specified in the [Rosbridge protocol](https://github.com/RobotWebTools/rosbridge_suite/blob/ros1/ROSBRIDGE_PROTOCOL.md#33-authentication-message). An instance of the `rosauth` service node must be running to actually process the authentication requests.
+
+If the `require_auth` parameter is set to `true`, the server will not process any messages (including any subscription requests) until a successful authentication has been performed, and will close sockets that have not authenticated after a timeout of 15s.
+
 ### Features of the RobotWebTools' rosbridge that are not implemented
 
 - PNG compression
 - fragmented packets
-- authentification (`rosauth`)
 - service server
 - TCP and UDP transport (only Websocket)
 - BSON mode
@@ -64,13 +69,17 @@ Will be encoded as :
 - `rosbridge_cpp_msgs`
 - `std_msgs`
 
-## Optionnal ROS parameters
+## Optional ROS parameters
 
 - `port` (*int*) : Websocket TCP port. `0` will let the OS attribute a random port (default value: `9090`)
 - `service_timeout` (*double*) : Timeout, in seconds, for service requests (default value: `5.0`)
 - `pong_timeout_s` (*double*) : Timeout, in seconds, of the websocket connection for each client (default value: `30.0`)
 - `watchdog_enabled` (*bool*) : Enable the watchdog (default value: `true`)
 - `watchdog_timeout` (*double*) : Watchdog timeout in seonds (default value: `5.0`)
+- `require_auth` (*bool*) : Require authentication (default value: `false`)
+- `require_ssl` (*bool*) : Start up the Websocket Server in secure mode (requires `ssl_cert_file` and `ssl_key_file` to be given) (default value: `false`)
+- `ssl_cert_file` (*string*) : Path to the SSL certificate file (default value: `""`)
+- `ssl_key_file` (*string*) : Path to the SSL key file (default value: `""`)
 
 ## Parameters set by the node
 

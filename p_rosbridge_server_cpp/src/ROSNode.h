@@ -12,6 +12,7 @@
 #include <QObject>
 #include <QString>
 #include <QWebSocketServer>
+#include <QPointer>
 
 #include "nlohmann/json.hpp"
 
@@ -109,6 +110,8 @@ private slots:
                             const std::string& id);
     void setLevelHandler(WSClient* client, const nlohmann::json& json,
                          const std::string& id);
+    void handleAuthRequest(WSClient *client, const nlohmann::json &json,
+                           const std::string &id);
 
     // rosbridge protocol
     void advertise(WSClient* client, const rosbridge_protocol::AdvertiseArgs& args);
@@ -139,7 +142,7 @@ private:
                            const ros::Time& receivedTime);
     void addNewSubscriberClient(WSClient* client,
                                 const rosbridge_protocol::SubscribeArgs& args);
-    void udapteSubscriberClient(SubscriberClient& c,
+    void updateSubscriberClient(SubscriberClient& c,
                                 const rosbridge_protocol::SubscribeArgs& args);
 
     void publishStats() const;
@@ -150,11 +153,11 @@ private:
     ros::Publisher m_clientsCountPub;
     ros::Publisher m_connectedClientsPub;
     ros::Timer m_pubStatsTimer;
+    ros::ServiceClient m_authServiceClient;
     std::map<std::string, ROSBridgePublisher> m_pubs;
     std::map<std::string, ROSBridgeSubscriber> m_subs;
     std::shared_ptr<ros_babel_fish::BabelFish> m_fish;
-    QWebSocketServer m_wsServer{QStringLiteral("rosbridge server"),
-                                QWebSocketServer::NonSecureMode};
+    QPointer<QWebSocketServer> m_wsServer;
     std::vector<std::shared_ptr<WSClient>> m_clients;
     rosbridge_protocol::StatusLevel m_currentStatusLevel =
         rosbridge_protocol::StatusLevel::Error;
@@ -170,6 +173,10 @@ private:
     double m_serviceTimeout = 5.0;
     int m_maxWebSocketBufferSize_MB = 1000;
     double m_pongTimeout_s = 30.;
+    bool m_requireAuth = false;
+    bool m_requireSsl = false;
+    std::string m_sslCertFile;
+    std::string m_sslKeyFile;
 
     // Diags
     diagnostic_updater::Updater m_diagnostics;

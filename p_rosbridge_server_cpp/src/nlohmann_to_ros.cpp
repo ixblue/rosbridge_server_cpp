@@ -8,7 +8,8 @@ namespace ros_nlohmann_converter
 {
 
 void fillCompoundArray(const nlohmann::json& jsonArray,
-                       ros_babel_fish::CompoundArrayMessage& msgArray)
+                       ros_babel_fish::CompoundArrayMessage& msgArray,
+                       const ros::Time& rosTime)
 {
     if(msgArray.isFixedSize())
     {
@@ -19,20 +20,33 @@ void fillCompoundArray(const nlohmann::json& jsonArray,
         if(msgArray.isFixedSize())
         {
             fillMessageFromJson(jsonArray[i],
-                                msgArray[i].as<ros_babel_fish::CompoundMessage>());
+                                msgArray[i].as<ros_babel_fish::CompoundMessage>(),
+                                rosTime);
         }
         else
         {
             auto& newItem = msgArray.appendEmpty();
             fillMessageFromJson(jsonArray[i],
-                                newItem.as<ros_babel_fish::CompoundMessage>());
+                                newItem.as<ros_babel_fish::CompoundMessage>(),
+                                rosTime);
         }
     }
 }
 
 void fillMessageFromJson(const nlohmann::json& json,
-                         ros_babel_fish::CompoundMessage& message)
+                         ros_babel_fish::CompoundMessage& message,
+                         const ros::Time& rosTime)
 {
+    // From rosbridge protocol spec (3.4.3), if header is missing or stamp in header is
+    // missing, fill with current ROS time
+    if(message.containsKey("header"))
+    {
+        if(const auto it = json.find("header");
+           it == json.end() || !it->contains("stamp"))
+        {
+            compound["header"]["stamp"] = rosTime;
+        }
+    }
     for(const auto& m : json.items())
     {
         auto& val = message[m.key()];
@@ -91,14 +105,15 @@ void fillMessageFromJson(const nlohmann::json& json,
                 break;
             case ros_babel_fish::MessageTypes::Compound: {
                 fillCompoundArray(m.value(),
-                                  base.as<ros_babel_fish::CompoundArrayMessage>());
+                                base.as<ros_babel_fish::CompoundArrayMessage>(),
+                                rosTime);
                 break;
             }
             }
             break;
         }
         case ros_babel_fish::MessageTypes::Compound: {
-            fillMessageFromJson(m.value(), val.as<ros_babel_fish::CompoundMessage>());
+            fillMessageFromJson(m.value(), val.as<ros_babel_fish::CompoundMessage>(), rosTime);
             break;
         }
         case ros_babel_fish::MessageTypes::None: break;
@@ -161,19 +176,7 @@ ros_babel_fish::BabelFishMessage::Ptr createMsg(ros_babel_fish::BabelFish& fish,
 {
     ros_babel_fish::Message::Ptr message = fish.createMessage(type);
     auto& compound = message->as<ros_babel_fish::CompoundMessage>();
-    fillMessageFromJson(json, compound);
-
-    // From rosbridge protocol spec (3.4.3), if header is missing ou stamp in header is
-    // missing, fill with current ROS time
-    if(compound.containsKey("header"))
-    {
-        if(const auto it = json.find("header");
-           it == json.end() || !it->contains("stamp"))
-        {
-            compound["header"]["stamp"] = rosTime;
-        }
-    }
-
+    fillMessageFromJson(json, compound, rosTime);
     return fish.translateMessage(message);
 }
 

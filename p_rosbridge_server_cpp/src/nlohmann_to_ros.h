@@ -15,10 +15,12 @@ namespace ros_nlohmann_converter
 {
 
 void fillMessageFromJson(const nlohmann::json& json,
-                         ros_babel_fish::CompoundMessage& message);
+                         ros_babel_fish::CompoundMessage& message,
+                         const ros::Time& rosTime);
 
 void fillCompoundArray(const nlohmann::json& jsonArray,
-                       ros_babel_fish::CompoundArrayMessage& msgArray);
+                       ros_babel_fish::CompoundArrayMessage& msgArray,
+                       const ros::Time& rosTime);
 
 template<typename T, typename U>
 void fillArrayLoop(const U& jsonArray, ros_babel_fish::ArrayMessage<T>& msgArray,
