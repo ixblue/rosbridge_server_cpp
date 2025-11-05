@@ -95,7 +95,6 @@ source /opt/ros/noetic/setup.bash
 mkdir -p ws/src
 cd ws/src
 git clone https://github.com/ixblue/rosbridge_server_cpp.git
-git clone https://github.com/1r0b1n0/librosqt.git
 git clone https://github.com/StefanFabian/ros_babel_fish
 catkin build
 ```
